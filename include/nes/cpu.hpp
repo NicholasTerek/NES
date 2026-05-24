@@ -47,16 +47,55 @@ public:
     void set_flag(Flag flag, bool value) noexcept;
 
 private:
+    enum class AddressMode : std::uint8_t {
+        implied,
+        accumulator,
+        immediate,
+        zero_page,
+        zero_page_x,
+        zero_page_y,
+        relative,
+        absolute,
+        absolute_x,
+        absolute_y,
+        indirect,
+        indexed_indirect,
+        indirect_indexed,
+    };
+
+    enum class Operation : std::uint8_t {
+        adc, and_, asl, bcc, bcs, beq, bit, bmi, bne, bpl, brk, bvc, bvs,
+        clc, cld, cli, clv, cmp, cpx, cpy, dec, dex, dey, eor_, inc, inx,
+        iny, jmp, jsr, lda, ldx, ldy, lsr, nop, ora, pha, php, pla, plp,
+        rol, ror, rti, rts, sbc, sec, sed, sei, sta, stx, sty, tax, tay,
+        tsx, txa, txs, tya, illegal,
+    };
+
+    struct Instruction {
+        const char* name;
+        Operation operation;
+        AddressMode mode;
+        std::uint8_t cycles;
+        bool page_cycle;
+    };
+
     CpuBusDevice& bus_;
     State state_{};
     std::uint8_t remaining_cycles_ = 0;
+    std::uint8_t opcode_ = 0;
+    std::uint16_t address_ = 0;
+    std::int8_t relative_ = 0;
+    bool page_crossed_ = false;
 
+    [[nodiscard]] static const std::array<Instruction, 256>& instruction_table();
     [[nodiscard]] std::uint8_t read(std::uint16_t address);
     void write(std::uint16_t address, std::uint8_t value);
     [[nodiscard]] std::uint16_t read_word(std::uint16_t address);
     void push(std::uint8_t value);
     [[nodiscard]] std::uint8_t pop();
     void service_interrupt(std::uint16_t vector, std::uint8_t cycles);
+    void resolve_address(AddressMode mode);
+    void execute(Operation operation);
 };
 
 }  // namespace nes
