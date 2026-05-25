@@ -86,6 +86,7 @@ private:
     std::uint16_t address_ = 0;
     std::int8_t relative_ = 0;
     bool page_crossed_ = false;
+    AddressMode current_mode_ = AddressMode::implied;
 
     [[nodiscard]] static const std::array<Instruction, 256>& instruction_table();
     [[nodiscard]] std::uint8_t read(std::uint16_t address);
@@ -96,6 +97,9 @@ private:
     void service_interrupt(std::uint16_t vector, std::uint8_t cycles);
     void resolve_address(AddressMode mode);
     void execute(Operation operation);
+    [[nodiscard]] std::uint8_t operand();
+    void store_operand(std::uint8_t value);
+    void set_zero_negative(std::uint8_t value) noexcept;
 };
 
 }  // namespace nes

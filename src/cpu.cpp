@@ -29,6 +29,7 @@ void Cpu::clock() {
         opcode_ = read(state_.program_counter++);
         const auto& instruction = instruction_table()[opcode_];
         remaining_cycles_ = instruction.cycles;
+        current_mode_ = instruction.mode;
         resolve_address(instruction.mode);
         execute(instruction.operation);
         if (instruction.page_cycle && page_crossed_) {
@@ -264,8 +265,103 @@ void Cpu::resolve_address(AddressMode mode) {
     }
 }
 
-void Cpu::execute(Operation) {
-    // Operations are added in focused, independently tested changesets.
+void Cpu::execute(Operation operation) {
+    switch (operation) {
+    case Operation::lda:
+        state_.a = operand();
+        set_zero_negative(state_.a);
+        break;
+    case Operation::ldx:
+        state_.x = operand();
+        set_zero_negative(state_.x);
+        break;
+    case Operation::ldy:
+        state_.y = operand();
+        set_zero_negative(state_.y);
+        break;
+    case Operation::sta:
+        write(address_, state_.a);
+        break;
+    case Operation::stx:
+        write(address_, state_.x);
+        break;
+    case Operation::sty:
+        write(address_, state_.y);
+        break;
+    case Operation::tax:
+        state_.x = state_.a;
+        set_zero_negative(state_.x);
+        break;
+    case Operation::tay:
+        state_.y = state_.a;
+        set_zero_negative(state_.y);
+        break;
+    case Operation::tsx:
+        state_.x = state_.stack_pointer;
+        set_zero_negative(state_.x);
+        break;
+    case Operation::txa:
+        state_.a = state_.x;
+        set_zero_negative(state_.a);
+        break;
+    case Operation::txs:
+        state_.stack_pointer = state_.x;
+        break;
+    case Operation::tya:
+        state_.a = state_.y;
+        set_zero_negative(state_.a);
+        break;
+    case Operation::inc: {
+        const auto value = static_cast<std::uint8_t>(operand() + 1U);
+        store_operand(value);
+        set_zero_negative(value);
+        break;
+    }
+    case Operation::dec: {
+        const auto value = static_cast<std::uint8_t>(operand() - 1U);
+        store_operand(value);
+        set_zero_negative(value);
+        break;
+    }
+    case Operation::inx:
+        ++state_.x;
+        set_zero_negative(state_.x);
+        break;
+    case Operation::iny:
+        ++state_.y;
+        set_zero_negative(state_.y);
+        break;
+    case Operation::dex:
+        --state_.x;
+        set_zero_negative(state_.x);
+        break;
+    case Operation::dey:
+        --state_.y;
+        set_zero_negative(state_.y);
+        break;
+    default:
+        break;
+    }
+}
+
+std::uint8_t Cpu::operand() {
+    if (current_mode_ == AddressMode::accumulator) {
+        return state_.a;
+    }
+    return read(address_);
+}
+
+void Cpu::store_operand(std::uint8_t value) {
+    if (current_mode_ == AddressMode::accumulator) {
+        state_.a = value;
+    } else {
+        write(address_, value);
+    }
+}
+
+void Cpu::set_zero_negative(std::uint8_t value) noexcept {
+    set_flag(zero, value == 0);
+    set_flag(negative, (value & 0x80U) != 0);
 }
 
 }  // namespace nes

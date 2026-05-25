@@ -1,5 +1,6 @@
 #include "nes/cpu.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstdlib>
@@ -62,11 +63,40 @@ void nmi_pushes_state_and_loads_vector() {
     expect(memory.bytes[0x01FC] == 0x67, "NMI pushes PC low byte");
 }
 
+void loads_stores_and_transfers_data() {
+    FlatMemory memory;
+    memory.bytes[0xFFFC] = 0x00;
+    memory.bytes[0xFFFD] = 0x80;
+    const std::array program{
+        std::uint8_t{0xA9}, std::uint8_t{0x42},  // LDA #$42
+        std::uint8_t{0x85}, std::uint8_t{0x10},  // STA $10
+        std::uint8_t{0xA2}, std::uint8_t{0x7F},  // LDX #$7F
+        std::uint8_t{0xE8},                      // INX
+        std::uint8_t{0x8A},                      // TXA
+    };
+    std::copy(program.begin(), program.end(), memory.bytes.begin() + 0x8000);
+
+    nes::Cpu cpu(memory);
+    cpu.reset();
+    drain(cpu);
+    drain(cpu);
+    expect(cpu.state().a == 0x42, "LDA loads the accumulator");
+    drain(cpu);
+    expect(memory.bytes[0x0010] == 0x42, "STA writes through the bus");
+    drain(cpu);
+    drain(cpu);
+    expect(cpu.state().x == 0x80, "INX wraps and updates X");
+    expect(cpu.flag(nes::Cpu::negative), "INX updates the negative flag");
+    drain(cpu);
+    expect(cpu.state().a == 0x80, "TXA transfers X into A");
+}
+
 }  // namespace
 
 int main() {
     reset_uses_vector();
     nmi_pushes_state_and_loads_vector();
+    loads_stores_and_transfers_data();
 
     if (failures != 0) {
         std::cerr << failures << " test(s) failed\n";
