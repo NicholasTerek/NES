@@ -307,6 +307,40 @@ void Cpu::execute(Operation operation) {
         set_flag(negative, (value & 0x80U) != 0);
         break;
     }
+    case Operation::asl: {
+        const auto value = operand();
+        set_flag(carry, (value & 0x80U) != 0);
+        const auto result = static_cast<std::uint8_t>(value << 1U);
+        store_operand(result);
+        set_zero_negative(result);
+        break;
+    }
+    case Operation::lsr: {
+        const auto value = operand();
+        set_flag(carry, (value & 0x01U) != 0);
+        const auto result = static_cast<std::uint8_t>(value >> 1U);
+        store_operand(result);
+        set_zero_negative(result);
+        break;
+    }
+    case Operation::rol: {
+        const auto value = operand();
+        const auto previous_carry = flag(carry) ? 1U : 0U;
+        set_flag(carry, (value & 0x80U) != 0);
+        const auto result = static_cast<std::uint8_t>((value << 1U) | previous_carry);
+        store_operand(result);
+        set_zero_negative(result);
+        break;
+    }
+    case Operation::ror: {
+        const auto value = operand();
+        const auto previous_carry = flag(carry) ? 0x80U : 0U;
+        set_flag(carry, (value & 0x01U) != 0);
+        const auto result = static_cast<std::uint8_t>((value >> 1U) | previous_carry);
+        store_operand(result);
+        set_zero_negative(result);
+        break;
+    }
     case Operation::cmp:
     case Operation::cpx:
     case Operation::cpy: {

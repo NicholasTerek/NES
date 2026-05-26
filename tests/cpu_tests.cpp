@@ -144,6 +144,35 @@ void logic_operations_update_accumulator() {
     expect(cpu.flag(nes::Cpu::negative), "logic operations update flags");
 }
 
+void shifts_work_on_registers_and_memory() {
+    FlatMemory memory;
+    memory.bytes[0xFFFC] = 0x00;
+    memory.bytes[0xFFFD] = 0x80;
+    memory.bytes[0x0020] = 0x81;
+    const std::array program{
+        std::uint8_t{0xA9}, std::uint8_t{0x81},  // LDA #$81
+        std::uint8_t{0x0A},                      // ASL A -> $02, C=1
+        std::uint8_t{0x6A},                      // ROR A -> $81, C=0
+        std::uint8_t{0x46}, std::uint8_t{0x20},  // LSR $20 -> $40, C=1
+        std::uint8_t{0x26}, std::uint8_t{0x20},  // ROL $20 -> $81
+    };
+    std::copy(program.begin(), program.end(), memory.bytes.begin() + 0x8000);
+
+    nes::Cpu cpu(memory);
+    cpu.reset();
+    drain(cpu);
+    drain(cpu);
+    drain(cpu);
+    expect(cpu.state().a == 0x02, "ASL shifts the accumulator");
+    expect(cpu.flag(nes::Cpu::carry), "ASL captures the high bit");
+    drain(cpu);
+    expect(cpu.state().a == 0x81, "ROR rotates carry into bit seven");
+    drain(cpu);
+    expect(memory.bytes[0x0020] == 0x40, "LSR writes shifted memory");
+    drain(cpu);
+    expect(memory.bytes[0x0020] == 0x81, "ROL rotates through carry");
+}
+
 }  // namespace
 
 int main() {
@@ -152,6 +181,7 @@ int main() {
     loads_stores_and_transfers_data();
     arithmetic_sets_6502_flags();
     logic_operations_update_accumulator();
+    shifts_work_on_registers_and_memory();
 
     if (failures != 0) {
         std::cerr << failures << " test(s) failed\n";
