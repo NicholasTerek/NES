@@ -267,6 +267,58 @@ void Cpu::resolve_address(AddressMode mode) {
 
 void Cpu::execute(Operation operation) {
     switch (operation) {
+    case Operation::adc: {
+        const auto value = operand();
+        const auto sum = static_cast<std::uint16_t>(state_.a) + value + (flag(carry) ? 1U : 0U);
+        const auto result = static_cast<std::uint8_t>(sum & 0xFFU);
+        set_flag(carry, sum > 0xFFU);
+        set_flag(overflow, ((~(state_.a ^ value) & (state_.a ^ result)) & 0x80U) != 0);
+        state_.a = result;
+        set_zero_negative(state_.a);
+        break;
+    }
+    case Operation::sbc: {
+        const auto value = operand();
+        const auto inverted = static_cast<std::uint16_t>(value ^ 0xFFU);
+        const auto sum = static_cast<std::uint16_t>(state_.a) + inverted + (flag(carry) ? 1U : 0U);
+        const auto result = static_cast<std::uint8_t>(sum & 0xFFU);
+        set_flag(carry, (sum & 0xFF00U) != 0);
+        set_flag(overflow, (((state_.a ^ result) & (state_.a ^ value)) & 0x80U) != 0);
+        state_.a = result;
+        set_zero_negative(state_.a);
+        break;
+    }
+    case Operation::and_:
+        state_.a = static_cast<std::uint8_t>(state_.a & operand());
+        set_zero_negative(state_.a);
+        break;
+    case Operation::eor_:
+        state_.a = static_cast<std::uint8_t>(state_.a ^ operand());
+        set_zero_negative(state_.a);
+        break;
+    case Operation::ora:
+        state_.a = static_cast<std::uint8_t>(state_.a | operand());
+        set_zero_negative(state_.a);
+        break;
+    case Operation::bit: {
+        const auto value = operand();
+        set_flag(zero, (state_.a & value) == 0);
+        set_flag(overflow, (value & 0x40U) != 0);
+        set_flag(negative, (value & 0x80U) != 0);
+        break;
+    }
+    case Operation::cmp:
+    case Operation::cpx:
+    case Operation::cpy: {
+        const auto left = operation == Operation::cmp ? state_.a
+                        : operation == Operation::cpx ? state_.x
+                                                      : state_.y;
+        const auto right = operand();
+        const auto difference = static_cast<std::uint8_t>(left - right);
+        set_flag(carry, left >= right);
+        set_zero_negative(difference);
+        break;
+    }
     case Operation::lda:
         state_.a = operand();
         set_zero_negative(state_.a);

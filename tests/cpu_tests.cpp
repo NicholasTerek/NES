@@ -91,12 +91,67 @@ void loads_stores_and_transfers_data() {
     expect(cpu.state().a == 0x80, "TXA transfers X into A");
 }
 
+void arithmetic_sets_6502_flags() {
+    FlatMemory memory;
+    memory.bytes[0xFFFC] = 0x00;
+    memory.bytes[0xFFFD] = 0x80;
+    const std::array program{
+        std::uint8_t{0xA9}, std::uint8_t{0x50},  // LDA #$50
+        std::uint8_t{0x69}, std::uint8_t{0x50},  // ADC #$50
+        std::uint8_t{0xE9}, std::uint8_t{0x01},  // SBC #$01
+        std::uint8_t{0xC9}, std::uint8_t{0x9F},  // CMP #$9F
+    };
+    std::copy(program.begin(), program.end(), memory.bytes.begin() + 0x8000);
+
+    nes::Cpu cpu(memory);
+    cpu.reset();
+    drain(cpu);
+    drain(cpu);
+    drain(cpu);
+    expect(cpu.state().a == 0xA0, "ADC stores the low byte of the sum");
+    expect(cpu.flag(nes::Cpu::overflow), "ADC detects signed overflow");
+    expect(cpu.flag(nes::Cpu::negative), "ADC updates the negative flag");
+    expect(!cpu.flag(nes::Cpu::carry), "ADC leaves carry clear below 256");
+
+    cpu.set_flag(nes::Cpu::carry, true);
+    drain(cpu);
+    expect(cpu.state().a == 0x9F, "SBC uses an inverted borrow");
+    expect(cpu.flag(nes::Cpu::carry), "SBC sets carry when no borrow occurs");
+    drain(cpu);
+    expect(cpu.flag(nes::Cpu::zero), "CMP sets zero for equal values");
+}
+
+void logic_operations_update_accumulator() {
+    FlatMemory memory;
+    memory.bytes[0xFFFC] = 0x00;
+    memory.bytes[0xFFFD] = 0x80;
+    const std::array program{
+        std::uint8_t{0xA9}, std::uint8_t{0xF0},  // LDA #$F0
+        std::uint8_t{0x29}, std::uint8_t{0x3C},  // AND #$3C -> $30
+        std::uint8_t{0x49}, std::uint8_t{0x0F},  // EOR #$0F -> $3F
+        std::uint8_t{0x09}, std::uint8_t{0x80},  // ORA #$80 -> $BF
+    };
+    std::copy(program.begin(), program.end(), memory.bytes.begin() + 0x8000);
+
+    nes::Cpu cpu(memory);
+    cpu.reset();
+    drain(cpu);
+    drain(cpu);
+    drain(cpu);
+    drain(cpu);
+    drain(cpu);
+    expect(cpu.state().a == 0xBF, "AND, EOR, and ORA compose correctly");
+    expect(cpu.flag(nes::Cpu::negative), "logic operations update flags");
+}
+
 }  // namespace
 
 int main() {
     reset_uses_vector();
     nmi_pushes_state_and_loads_vector();
     loads_stores_and_transfers_data();
+    arithmetic_sets_6502_flags();
+    logic_operations_update_accumulator();
 
     if (failures != 0) {
         std::cerr << failures << " test(s) failed\n";
