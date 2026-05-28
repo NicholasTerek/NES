@@ -312,6 +312,55 @@ void Cpu::execute(Operation operation) {
     case Operation::bvs:
         branch(flag(overflow));
         break;
+    case Operation::jmp:
+        state_.program_counter = address_;
+        break;
+    case Operation::jsr: {
+        const auto return_address = static_cast<std::uint16_t>(state_.program_counter - 1U);
+        push(static_cast<std::uint8_t>(return_address >> 8U));
+        push(static_cast<std::uint8_t>(return_address & 0xFFU));
+        state_.program_counter = address_;
+        break;
+    }
+    case Operation::rts: {
+        const auto low = static_cast<std::uint16_t>(pop());
+        const auto high = static_cast<std::uint16_t>(pop());
+        state_.program_counter = static_cast<std::uint16_t>(((high << 8U) | low) + 1U);
+        break;
+    }
+    case Operation::brk:
+        ++state_.program_counter;
+        push(static_cast<std::uint8_t>(state_.program_counter >> 8U));
+        push(static_cast<std::uint8_t>(state_.program_counter & 0xFFU));
+        push(static_cast<std::uint8_t>(state_.status | break_command | unused));
+        set_flag(break_command, false);
+        set_flag(interrupt_disable, true);
+        state_.program_counter = read_word(0xFFFE);
+        break;
+    case Operation::rti: {
+        state_.status = pop();
+        set_flag(break_command, false);
+        set_flag(unused, true);
+        const auto low = static_cast<std::uint16_t>(pop());
+        const auto high = static_cast<std::uint16_t>(pop());
+        state_.program_counter = static_cast<std::uint16_t>((high << 8U) | low);
+        break;
+    }
+    case Operation::pha:
+        push(state_.a);
+        break;
+    case Operation::php:
+        push(static_cast<std::uint8_t>(state_.status | break_command | unused));
+        break;
+    case Operation::pla:
+        state_.a = pop();
+        set_zero_negative(state_.a);
+        break;
+    case Operation::plp:
+        state_.status = pop();
+        set_flag(break_command, false);
+        set_flag(unused, true);
+        break;
     case Operation::adc: {
         const auto value = operand();
         const auto sum = static_cast<std::uint16_t>(state_.a) + value + (flag(carry) ? 1U : 0U);

@@ -229,6 +229,63 @@ void flag_instructions_set_and_clear_bits() {
     expect(cpu.flag(nes::Cpu::interrupt_disable), "SEI sets interrupt mask");
 }
 
+void subroutines_preserve_return_address() {
+    FlatMemory memory;
+    memory.bytes[0xFFFC] = 0x00;
+    memory.bytes[0xFFFD] = 0x80;
+    const std::array program{
+        std::uint8_t{0x20}, std::uint8_t{0x06}, std::uint8_t{0x80},  // JSR $8006
+        std::uint8_t{0xA9}, std::uint8_t{0x42},                    // LDA #$42
+        std::uint8_t{0xEA},                                        // NOP
+        std::uint8_t{0xA9}, std::uint8_t{0x99},                    // LDA #$99
+        std::uint8_t{0x60},                                        // RTS
+    };
+    std::copy(program.begin(), program.end(), memory.bytes.begin() + 0x8000);
+
+    nes::Cpu cpu(memory);
+    cpu.reset();
+    drain(cpu);
+    drain(cpu);
+    expect(cpu.state().program_counter == 0x8006, "JSR enters the subroutine");
+    drain(cpu);
+    expect(cpu.state().a == 0x99, "subroutine instructions execute");
+    drain(cpu);
+    expect(cpu.state().program_counter == 0x8003, "RTS resumes after the JSR operand");
+    drain(cpu);
+    expect(cpu.state().a == 0x42, "execution resumes at the caller");
+}
+
+void stack_and_interrupt_returns_restore_state() {
+    FlatMemory memory;
+    memory.bytes[0xFFFC] = 0x00;
+    memory.bytes[0xFFFD] = 0x80;
+    memory.bytes[0xFFFE] = 0x00;
+    memory.bytes[0xFFFF] = 0x90;
+    const std::array program{
+        std::uint8_t{0xA9}, std::uint8_t{0x5A},  // LDA #$5A
+        std::uint8_t{0x48},                      // PHA
+        std::uint8_t{0xA9}, std::uint8_t{0x00},  // LDA #$00
+        std::uint8_t{0x68},                      // PLA
+        std::uint8_t{0x00},                      // BRK
+        std::uint8_t{0xEA},                      // padding
+    };
+    std::copy(program.begin(), program.end(), memory.bytes.begin() + 0x8000);
+    memory.bytes[0x9000] = 0x40;  // RTI
+
+    nes::Cpu cpu(memory);
+    cpu.reset();
+    drain(cpu);
+    drain(cpu);
+    drain(cpu);
+    drain(cpu);
+    drain(cpu);
+    expect(cpu.state().a == 0x5A, "PHA and PLA round-trip the accumulator");
+    drain(cpu);
+    expect(cpu.state().program_counter == 0x9000, "BRK loads the IRQ vector");
+    drain(cpu);
+    expect(cpu.state().program_counter == 0x8008, "RTI resumes after BRK padding");
+}
+
 }  // namespace
 
 int main() {
@@ -240,6 +297,8 @@ int main() {
     shifts_work_on_registers_and_memory();
     branches_follow_status_flags();
     flag_instructions_set_and_clear_bits();
+    subroutines_preserve_return_address();
+    stack_and_interrupt_returns_restore_state();
 
     if (failures != 0) {
         std::cerr << failures << " test(s) failed\n";
