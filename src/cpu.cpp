@@ -267,6 +267,51 @@ void Cpu::resolve_address(AddressMode mode) {
 
 void Cpu::execute(Operation operation) {
     switch (operation) {
+    case Operation::clc:
+        set_flag(carry, false);
+        break;
+    case Operation::cld:
+        set_flag(decimal, false);
+        break;
+    case Operation::cli:
+        set_flag(interrupt_disable, false);
+        break;
+    case Operation::clv:
+        set_flag(overflow, false);
+        break;
+    case Operation::sec:
+        set_flag(carry, true);
+        break;
+    case Operation::sed:
+        set_flag(decimal, true);
+        break;
+    case Operation::sei:
+        set_flag(interrupt_disable, true);
+        break;
+    case Operation::bcc:
+        branch(!flag(carry));
+        break;
+    case Operation::bcs:
+        branch(flag(carry));
+        break;
+    case Operation::beq:
+        branch(flag(zero));
+        break;
+    case Operation::bmi:
+        branch(flag(negative));
+        break;
+    case Operation::bne:
+        branch(!flag(zero));
+        break;
+    case Operation::bpl:
+        branch(!flag(negative));
+        break;
+    case Operation::bvc:
+        branch(!flag(overflow));
+        break;
+    case Operation::bvs:
+        branch(flag(overflow));
+        break;
     case Operation::adc: {
         const auto value = operand();
         const auto sum = static_cast<std::uint16_t>(state_.a) + value + (flag(carry) ? 1U : 0U);
@@ -448,6 +493,20 @@ void Cpu::store_operand(std::uint8_t value) {
 void Cpu::set_zero_negative(std::uint8_t value) noexcept {
     set_flag(zero, value == 0);
     set_flag(negative, (value & 0x80U) != 0);
+}
+
+void Cpu::branch(bool condition) {
+    if (!condition) {
+        return;
+    }
+
+    ++remaining_cycles_;
+    const auto original = state_.program_counter;
+    state_.program_counter = static_cast<std::uint16_t>(
+        static_cast<std::int32_t>(state_.program_counter) + relative_);
+    if ((original & 0xFF00U) != (state_.program_counter & 0xFF00U)) {
+        ++remaining_cycles_;
+    }
 }
 
 }  // namespace nes

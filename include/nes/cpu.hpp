@@ -100,6 +100,7 @@ private:
     [[nodiscard]] std::uint8_t operand();
     void store_operand(std::uint8_t value);
     void set_zero_negative(std::uint8_t value) noexcept;
+    void branch(bool condition);
 };
 
 }  // namespace nes

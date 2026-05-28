@@ -173,6 +173,62 @@ void shifts_work_on_registers_and_memory() {
     expect(memory.bytes[0x0020] == 0x81, "ROL rotates through carry");
 }
 
+void branches_follow_status_flags() {
+    FlatMemory memory;
+    memory.bytes[0xFFFC] = 0x00;
+    memory.bytes[0xFFFD] = 0x80;
+    const std::array program{
+        std::uint8_t{0xA9}, std::uint8_t{0x00},  // LDA #$00, Z=1
+        std::uint8_t{0xF0}, std::uint8_t{0x02},  // BEQ +2
+        std::uint8_t{0xA9}, std::uint8_t{0xFF},  // skipped
+        std::uint8_t{0xA9}, std::uint8_t{0x01},  // LDA #$01
+        std::uint8_t{0xD0}, std::uint8_t{0xFC},  // BNE -4
+    };
+    std::copy(program.begin(), program.end(), memory.bytes.begin() + 0x8000);
+
+    nes::Cpu cpu(memory);
+    cpu.reset();
+    drain(cpu);
+    drain(cpu);
+    drain(cpu);
+    expect(cpu.state().program_counter == 0x8006, "BEQ takes a positive relative offset");
+    drain(cpu);
+    expect(cpu.state().a == 0x01, "taken branch skips intervening instructions");
+    drain(cpu);
+    expect(cpu.state().program_counter == 0x8006, "BNE sign-extends a negative offset");
+}
+
+void flag_instructions_set_and_clear_bits() {
+    FlatMemory memory;
+    memory.bytes[0xFFFC] = 0x00;
+    memory.bytes[0xFFFD] = 0x80;
+    const std::array program{
+        std::uint8_t{0x38},  // SEC
+        std::uint8_t{0x18},  // CLC
+        std::uint8_t{0xF8},  // SED
+        std::uint8_t{0xD8},  // CLD
+        std::uint8_t{0x58},  // CLI
+        std::uint8_t{0x78},  // SEI
+    };
+    std::copy(program.begin(), program.end(), memory.bytes.begin() + 0x8000);
+
+    nes::Cpu cpu(memory);
+    cpu.reset();
+    drain(cpu);
+    drain(cpu);
+    expect(cpu.flag(nes::Cpu::carry), "SEC sets carry");
+    drain(cpu);
+    expect(!cpu.flag(nes::Cpu::carry), "CLC clears carry");
+    drain(cpu);
+    expect(cpu.flag(nes::Cpu::decimal), "SED sets decimal");
+    drain(cpu);
+    expect(!cpu.flag(nes::Cpu::decimal), "CLD clears decimal");
+    drain(cpu);
+    expect(!cpu.flag(nes::Cpu::interrupt_disable), "CLI clears interrupt mask");
+    drain(cpu);
+    expect(cpu.flag(nes::Cpu::interrupt_disable), "SEI sets interrupt mask");
+}
+
 }  // namespace
 
 int main() {
@@ -182,6 +238,8 @@ int main() {
     arithmetic_sets_6502_flags();
     logic_operations_update_accumulator();
     shifts_work_on_registers_and_memory();
+    branches_follow_status_flags();
+    flag_instructions_set_and_clear_bits();
 
     if (failures != 0) {
         std::cerr << failures << " test(s) failed\n";
