@@ -286,6 +286,50 @@ void stack_and_interrupt_returns_restore_state() {
     expect(cpu.state().program_counter == 0x8008, "RTI resumes after BRK padding");
 }
 
+void indexed_addressing_wraps_like_hardware() {
+    FlatMemory memory;
+    memory.bytes[0xFFFC] = 0x00;
+    memory.bytes[0xFFFD] = 0x80;
+    memory.bytes[0x0000] = 0x00;
+    memory.bytes[0x0001] = 0x90;
+    memory.bytes[0x9000] = 0x6C;
+    memory.bytes[0x1303] = 0xAB;
+    const std::array program{
+        std::uint8_t{0xA2}, std::uint8_t{0x04},                    // LDX #$04
+        std::uint8_t{0xA1}, std::uint8_t{0xFC},                    // LDA ($FC,X)
+        std::uint8_t{0xBD}, std::uint8_t{0xFF}, std::uint8_t{0x12},  // LDA $12FF,X
+    };
+    std::copy(program.begin(), program.end(), memory.bytes.begin() + 0x8000);
+
+    nes::Cpu cpu(memory);
+    cpu.reset();
+    drain(cpu);
+    drain(cpu);
+    drain(cpu);
+    expect(cpu.state().a == 0x6C, "indexed-indirect pointers wrap in zero page");
+    drain(cpu);
+    expect(cpu.state().a == 0xAB, "absolute indexed addressing crosses pages");
+}
+
+void indirect_jump_reproduces_page_boundary_bug() {
+    FlatMemory memory;
+    memory.bytes[0xFFFC] = 0x00;
+    memory.bytes[0xFFFD] = 0x80;
+    memory.bytes[0x8000] = 0x6C;  // JMP ($12FF)
+    memory.bytes[0x8001] = 0xFF;
+    memory.bytes[0x8002] = 0x12;
+    memory.bytes[0x12FF] = 0x34;
+    memory.bytes[0x1200] = 0x56;
+    memory.bytes[0x1300] = 0x99;
+
+    nes::Cpu cpu(memory);
+    cpu.reset();
+    drain(cpu);
+    drain(cpu);
+    expect(cpu.state().program_counter == 0x5634,
+           "indirect JMP wraps the high-byte read within the page");
+}
+
 }  // namespace
 
 int main() {
@@ -299,6 +343,8 @@ int main() {
     flag_instructions_set_and_clear_bits();
     subroutines_preserve_return_address();
     stack_and_interrupt_returns_restore_state();
+    indexed_addressing_wraps_like_hardware();
+    indirect_jump_reproduces_page_boundary_bug();
 
     if (failures != 0) {
         std::cerr << failures << " test(s) failed\n";
