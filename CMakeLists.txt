@@ -19,6 +19,11 @@ target_compile_options(nes_core PRIVATE
     $<$<CXX_COMPILER_ID:MSVC>:/W4;/permissive->
 )
 
+add_executable(nes_cpu_functional
+    tools/cpu_functional_runner.cpp
+)
+target_link_libraries(nes_cpu_functional PRIVATE nes_core)
+
 if(NES_BUILD_TESTS)
     enable_testing()
     add_executable(nes_tests
