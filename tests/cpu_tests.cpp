@@ -1,41 +1,17 @@
 #include "nes/cpu.hpp"
+#include "test_harness.hpp"
 
 #include <algorithm>
 #include <array>
-#include <cstdint>
 #include <cstdlib>
 #include <iostream>
-#include <string_view>
 
 namespace {
 
-class FlatMemory final : public nes::CpuBusDevice {
-public:
-    std::array<std::uint8_t, 65'536> bytes{};
-
-    std::uint8_t cpu_read(std::uint16_t address, bool) override {
-        return bytes[address];
-    }
-
-    void cpu_write(std::uint16_t address, std::uint8_t value) override {
-        bytes[address] = value;
-    }
-};
-
-int failures = 0;
-
-void expect(bool condition, std::string_view message) {
-    if (!condition) {
-        std::cerr << "FAIL: " << message << '\n';
-        ++failures;
-    }
-}
-
-void drain(nes::Cpu& cpu) {
-    do {
-        cpu.clock();
-    } while (!cpu.instruction_complete());
-}
+using nes::test::FlatMemory;
+using nes::test::drain;
+using nes::test::expect;
+using nes::test::failures;
 
 void reset_uses_vector() {
     FlatMemory memory;
