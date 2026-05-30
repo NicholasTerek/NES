@@ -311,6 +311,7 @@ void indirect_jump_reproduces_page_boundary_bug() {
 int run_cpu_addressing_tests();
 int run_cpu_alu_tests();
 int run_cpu_mutation_tests();
+int run_cpu_control_tests();
 
 int main() {
     reset_uses_vector();
@@ -328,6 +329,7 @@ int main() {
     static_cast<void>(run_cpu_addressing_tests());
     static_cast<void>(run_cpu_alu_tests());
     static_cast<void>(run_cpu_mutation_tests());
+    static_cast<void>(run_cpu_control_tests());
 
     if (failures != 0) {
         std::cerr << failures << " test(s) failed\n";
