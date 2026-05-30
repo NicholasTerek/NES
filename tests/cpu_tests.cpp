@@ -309,6 +309,7 @@ void indirect_jump_reproduces_page_boundary_bug() {
 }  // namespace
 
 int run_cpu_addressing_tests();
+int run_cpu_alu_tests();
 
 int main() {
     reset_uses_vector();
@@ -324,6 +325,7 @@ int main() {
     indexed_addressing_wraps_like_hardware();
     indirect_jump_reproduces_page_boundary_bug();
     static_cast<void>(run_cpu_addressing_tests());
+    static_cast<void>(run_cpu_alu_tests());
 
     if (failures != 0) {
         std::cerr << failures << " test(s) failed\n";
