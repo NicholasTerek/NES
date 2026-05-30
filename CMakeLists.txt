@@ -21,7 +21,10 @@ target_compile_options(nes_core PRIVATE
 
 if(NES_BUILD_TESTS)
     enable_testing()
-    add_executable(nes_tests tests/cpu_tests.cpp)
+    add_executable(nes_tests
+        tests/cpu_tests.cpp
+        tests/cpu_addressing_tests.cpp
+    )
     target_link_libraries(nes_tests PRIVATE nes_core)
     add_test(NAME nes_tests COMMAND nes_tests)
 endif()
