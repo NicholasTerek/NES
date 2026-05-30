@@ -25,6 +25,7 @@ if(NES_BUILD_TESTS)
         tests/cpu_tests.cpp
         tests/cpu_addressing_tests.cpp
         tests/cpu_alu_tests.cpp
+        tests/cpu_mutation_tests.cpp
     )
     target_link_libraries(nes_tests PRIVATE nes_core)
     add_test(NAME nes_tests COMMAND nes_tests)
