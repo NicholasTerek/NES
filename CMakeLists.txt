@@ -11,6 +11,7 @@ option(NES_BUILD_SDL "Build the SDL2 frontend when SDL2 is available" ON)
 
 add_library(nes_core
     src/cpu.cpp
+    src/mapper.cpp
 )
 
 target_include_directories(nes_core PUBLIC include)
@@ -32,6 +33,7 @@ if(NES_BUILD_TESTS)
         tests/cpu_alu_tests.cpp
         tests/cpu_mutation_tests.cpp
         tests/cpu_control_tests.cpp
+        tests/cartridge_tests.cpp
     )
     target_link_libraries(nes_tests PRIVATE nes_core)
     add_test(NAME nes_tests COMMAND nes_tests)

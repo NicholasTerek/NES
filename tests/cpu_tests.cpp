@@ -312,6 +312,7 @@ int run_cpu_addressing_tests();
 int run_cpu_alu_tests();
 int run_cpu_mutation_tests();
 int run_cpu_control_tests();
+int run_cartridge_tests();
 
 int main() {
     reset_uses_vector();
@@ -330,6 +331,7 @@ int main() {
     static_cast<void>(run_cpu_alu_tests());
     static_cast<void>(run_cpu_mutation_tests());
     static_cast<void>(run_cpu_control_tests());
+    failures += run_cartridge_tests();
 
     if (failures != 0) {
         std::cerr << failures << " test(s) failed\n";
