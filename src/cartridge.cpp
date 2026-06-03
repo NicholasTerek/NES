@@ -74,6 +74,9 @@ std::shared_ptr<Cartridge> Cartridge::from_ines(std::span<const std::uint8_t> im
     case 0:
         cartridge->mapper_ = std::make_unique<Mapper0>(program_banks, character_banks);
         break;
+    case 2:
+        cartridge->mapper_ = std::make_unique<Mapper2>(program_banks, character_banks);
+        break;
     default:
         throw std::invalid_argument("unsupported mapper " + std::to_string(cartridge->mapper_id_));
     }

@@ -101,6 +101,28 @@ void cartridge_rejects_invalid_images() {
     expect(rejected, "unsupported mappers fail explicitly");
 }
 
+void uxrom_switches_lower_program_bank() {
+    auto image = ines_image(3, 0, 0x20);
+    image[16] = 0x10;
+    image[16 + 16 * 1024] = 0x20;
+    image[16 + 2 * 16 * 1024] = 0x30;
+    const auto cartridge = nes::Cartridge::from_ines(image);
+    std::uint8_t value = 0;
+
+    expect(cartridge->cpu_read(0x8000, value) && value == 0x10,
+           "UxROM starts with bank zero selected");
+    expect(cartridge->cpu_read(0xC000, value) && value == 0x30,
+           "UxROM fixes the last bank at the top of memory");
+    expect(cartridge->cpu_write(0x8000, 1), "UxROM consumes bank-select writes");
+    expect(cartridge->cpu_read(0x8000, value) && value == 0x20,
+           "UxROM selects a lower program bank");
+    expect(cartridge->cpu_read(0xC000, value) && value == 0x30,
+           "UxROM keeps its fixed bank after switching");
+    cartridge->reset();
+    expect(cartridge->cpu_read(0x8000, value) && value == 0x10,
+           "UxROM reset returns to bank zero");
+}
+
 }  // namespace
 
 int run_cartridge_tests() {
@@ -109,5 +131,6 @@ int run_cartridge_tests() {
     cartridge_parses_ines_and_routes_accesses();
     cartridge_allocates_character_ram();
     cartridge_rejects_invalid_images();
+    uxrom_switches_lower_program_bank();
     return failures;
 }
