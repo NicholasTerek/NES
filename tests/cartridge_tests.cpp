@@ -1,8 +1,11 @@
+#include "nes/cartridge.hpp"
 #include "nes/mapper.hpp"
 
 #include <cstdlib>
 #include <iostream>
+#include <stdexcept>
 #include <string_view>
+#include <vector>
 
 namespace {
 
@@ -26,10 +29,76 @@ void nrom_mirrors_single_program_bank() {
 void nrom_maps_character_memory() {
     nes::Mapper0 rom_mapper(1, 1);
     expect(rom_mapper.ppu_read(0x1FFF) == 0x1FFF, "NROM exposes pattern memory");
-    expect(!rom_mapper.ppu_write(0x0100), "CHR ROM rejects writes");
+    expect(!rom_mapper.ppu_write(0x0100).address, "CHR ROM rejects writes");
 
     nes::Mapper0 ram_mapper(1, 0);
-    expect(ram_mapper.ppu_write(0x0100) == 0x0100, "CHR RAM accepts writes");
+    expect(ram_mapper.ppu_write(0x0100).address == 0x0100, "CHR RAM accepts writes");
+}
+
+std::vector<std::uint8_t> ines_image(std::uint8_t program_banks,
+                                     std::uint8_t character_banks,
+                                     std::uint8_t flags6 = 0) {
+    const auto trainer_bytes = (flags6 & 0x04U) != 0U ? 512U : 0U;
+    std::vector<std::uint8_t> image(
+        16U + trainer_bytes + static_cast<std::size_t>(program_banks) * 16U * 1024U +
+            static_cast<std::size_t>(character_banks) * 8U * 1024U,
+        0);
+    image[0] = 'N';
+    image[1] = 'E';
+    image[2] = 'S';
+    image[3] = 0x1A;
+    image[4] = program_banks;
+    image[5] = character_banks;
+    image[6] = flags6;
+    return image;
+}
+
+void cartridge_parses_ines_and_routes_accesses() {
+    auto image = ines_image(1, 1, 0x01);
+    image[16] = 0x42;
+    image[16 + 16 * 1024] = 0x24;
+    const auto cartridge = nes::Cartridge::from_ines(image);
+
+    expect(cartridge->mapper_id() == 0, "iNES parser extracts mapper zero");
+    expect(cartridge->mirror() == nes::Mirror::vertical, "iNES parser extracts mirroring");
+    expect(cartridge->program_size() == 16 * 1024, "iNES parser loads program ROM");
+    expect(cartridge->character_size() == 8 * 1024, "iNES parser loads character ROM");
+
+    std::uint8_t value = 0;
+    expect(cartridge->cpu_read(0x8000, value) && value == 0x42,
+           "cartridge routes CPU reads through its mapper");
+    expect(cartridge->cpu_read(0xC000, value) && value == 0x42,
+           "single-bank cartridge mirrors program ROM");
+    expect(cartridge->ppu_read(0x0000, value) && value == 0x24,
+           "cartridge routes PPU reads through its mapper");
+}
+
+void cartridge_allocates_character_ram() {
+    const auto cartridge = nes::Cartridge::from_ines(ines_image(1, 0));
+    expect(cartridge->character_size() == 8 * 1024, "zero CHR banks allocate CHR RAM");
+    expect(cartridge->ppu_write(0x1234, 0xA5), "CHR RAM accepts cartridge writes");
+    std::uint8_t value = 0;
+    expect(cartridge->ppu_read(0x1234, value) && value == 0xA5,
+           "CHR RAM preserves written bytes");
+}
+
+void cartridge_rejects_invalid_images() {
+    bool rejected = false;
+    try {
+        static_cast<void>(nes::Cartridge::from_ines(std::vector<std::uint8_t>(16, 0)));
+    } catch (const std::invalid_argument&) {
+        rejected = true;
+    }
+    expect(rejected, "invalid iNES magic is rejected");
+
+    auto unsupported = ines_image(1, 1, 0x10);
+    rejected = false;
+    try {
+        static_cast<void>(nes::Cartridge::from_ines(unsupported));
+    } catch (const std::invalid_argument&) {
+        rejected = true;
+    }
+    expect(rejected, "unsupported mappers fail explicitly");
 }
 
 }  // namespace
@@ -37,5 +106,8 @@ void nrom_maps_character_memory() {
 int run_cartridge_tests() {
     nrom_mirrors_single_program_bank();
     nrom_maps_character_memory();
+    cartridge_parses_ines_and_routes_accesses();
+    cartridge_allocates_character_ram();
+    cartridge_rejects_invalid_images();
     return failures;
 }

@@ -12,8 +12,8 @@ std::optional<std::uint32_t> Mapper0::cpu_read(std::uint16_t address) {
     return address & (program_banks_ > 1U ? 0x7FFFU : 0x3FFFU);
 }
 
-std::optional<std::uint32_t> Mapper0::cpu_write(std::uint16_t address, std::uint8_t) {
-    return cpu_read(address);
+Mapper::WriteMapping Mapper0::cpu_write(std::uint16_t address, std::uint8_t) {
+    return {address >= 0x8000U, std::nullopt};
 }
 
 std::optional<std::uint32_t> Mapper0::ppu_read(std::uint16_t address) {
@@ -23,11 +23,11 @@ std::optional<std::uint32_t> Mapper0::ppu_read(std::uint16_t address) {
     return std::nullopt;
 }
 
-std::optional<std::uint32_t> Mapper0::ppu_write(std::uint16_t address) {
+Mapper::WriteMapping Mapper0::ppu_write(std::uint16_t address) {
     if (address <= 0x1FFFU && character_banks_ == 0U) {
-        return address;
+        return {true, address};
     }
-    return std::nullopt;
+    return {address <= 0x1FFFU, std::nullopt};
 }
 
 void Mapper0::reset() {}

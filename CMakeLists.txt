@@ -11,6 +11,7 @@ option(NES_BUILD_SDL "Build the SDL2 frontend when SDL2 is available" ON)
 
 add_library(nes_core
     src/cpu.cpp
+    src/cartridge.cpp
     src/mapper.cpp
 )
 
