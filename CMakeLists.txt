@@ -10,6 +10,7 @@ option(NES_BUILD_TESTS "Build the emulator test suite" ON)
 option(NES_BUILD_SDL "Build the SDL2 frontend when SDL2 is available" ON)
 
 add_library(nes_core
+    src/bus.cpp
     src/cpu.cpp
     src/cartridge.cpp
     src/mapper.cpp
@@ -35,6 +36,7 @@ if(NES_BUILD_TESTS)
         tests/cpu_mutation_tests.cpp
         tests/cpu_control_tests.cpp
         tests/cartridge_tests.cpp
+        tests/bus_tests.cpp
     )
     target_link_libraries(nes_tests PRIVATE nes_core)
     add_test(NAME nes_tests COMMAND nes_tests)

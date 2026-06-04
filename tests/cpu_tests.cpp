@@ -313,6 +313,7 @@ int run_cpu_alu_tests();
 int run_cpu_mutation_tests();
 int run_cpu_control_tests();
 int run_cartridge_tests();
+int run_bus_tests();
 
 int main() {
     reset_uses_vector();
@@ -332,12 +333,13 @@ int main() {
     static_cast<void>(run_cpu_mutation_tests());
     static_cast<void>(run_cpu_control_tests());
     failures += run_cartridge_tests();
+    static_cast<void>(run_bus_tests());
 
     if (failures != 0) {
         std::cerr << failures << " test(s) failed\n";
         return EXIT_FAILURE;
     }
 
-    std::cout << "all CPU tests passed\n";
+    std::cout << "all emulator tests passed\n";
     return EXIT_SUCCESS;
 }
