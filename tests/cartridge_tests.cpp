@@ -37,7 +37,8 @@ void nrom_maps_character_memory() {
 
 std::vector<std::uint8_t> ines_image(std::uint8_t program_banks,
                                      std::uint8_t character_banks,
-                                     std::uint8_t flags6 = 0) {
+                                     std::uint8_t flags6 = 0,
+                                     std::uint8_t program_ram_banks = 0) {
     const auto trainer_bytes = (flags6 & 0x04U) != 0U ? 512U : 0U;
     std::vector<std::uint8_t> image(
         16U + trainer_bytes + static_cast<std::size_t>(program_banks) * 16U * 1024U +
@@ -50,6 +51,7 @@ std::vector<std::uint8_t> ines_image(std::uint8_t program_banks,
     image[4] = program_banks;
     image[5] = character_banks;
     image[6] = flags6;
+    image[8] = program_ram_banks;
     return image;
 }
 
@@ -80,6 +82,37 @@ void cartridge_allocates_character_ram() {
     std::uint8_t value = 0;
     expect(cartridge->ppu_read(0x1234, value) && value == 0xA5,
            "CHR RAM preserves written bytes");
+}
+
+void cartridge_maps_program_ram() {
+    const auto cartridge = nes::Cartridge::from_ines(ines_image(1, 1, 0x02, 2));
+    expect(cartridge->program_ram_size() == 16 * 1024,
+           "iNES byte eight sizes cartridge program RAM");
+    expect(cartridge->has_battery(), "battery-backed RAM metadata is preserved");
+
+    std::uint8_t value = 0;
+    expect(cartridge->cpu_write(0x6000, 0x4A), "cartridge accepts program RAM writes");
+    expect(cartridge->cpu_write(0x7FFF, 0xA4), "program RAM includes its upper boundary");
+    expect(cartridge->cpu_read(0x6000, value) && value == 0x4A,
+           "cartridge reads the first program RAM byte");
+    expect(cartridge->cpu_read(0x7FFF, value) && value == 0xA4,
+           "cartridge reads the last mapped program RAM byte");
+}
+
+void trainer_initializes_program_ram() {
+    auto image = ines_image(1, 1, 0x04);
+    image[16] = 0x35;
+    image[16 + 511] = 0x53;
+    image[16 + 512] = 0xA9;
+    const auto cartridge = nes::Cartridge::from_ines(image);
+
+    std::uint8_t value = 0;
+    expect(cartridge->cpu_read(0x7000, value) && value == 0x35,
+           "trainer begins at CPU address $7000");
+    expect(cartridge->cpu_read(0x71FF, value) && value == 0x53,
+           "trainer fills its 512-byte program RAM window");
+    expect(cartridge->cpu_read(0x8000, value) && value == 0xA9,
+           "program ROM begins after the trainer");
 }
 
 void cartridge_rejects_invalid_images() {
@@ -130,6 +163,8 @@ int run_cartridge_tests() {
     nrom_maps_character_memory();
     cartridge_parses_ines_and_routes_accesses();
     cartridge_allocates_character_ram();
+    cartridge_maps_program_ram();
+    trainer_initializes_program_ram();
     cartridge_rejects_invalid_images();
     uxrom_switches_lower_program_bank();
     return failures;

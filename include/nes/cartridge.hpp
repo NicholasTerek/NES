@@ -33,7 +33,9 @@ public:
     [[nodiscard]] Mirror mirror() const noexcept;
     [[nodiscard]] std::uint8_t mapper_id() const noexcept;
     [[nodiscard]] std::size_t program_size() const noexcept;
+    [[nodiscard]] std::size_t program_ram_size() const noexcept;
     [[nodiscard]] std::size_t character_size() const noexcept;
+    [[nodiscard]] bool has_battery() const noexcept;
 
 private:
     Cartridge() = default;
@@ -41,7 +43,9 @@ private:
     Mirror mirror_ = Mirror::horizontal;
     std::uint8_t mapper_id_ = 0;
     std::vector<std::uint8_t> program_memory_;
+    std::vector<std::uint8_t> program_ram_;
     std::vector<std::uint8_t> character_memory_;
+    bool has_battery_ = false;
     std::unique_ptr<Mapper> mapper_;
 };
 

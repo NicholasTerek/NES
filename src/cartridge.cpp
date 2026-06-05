@@ -13,7 +13,11 @@ namespace {
 constexpr std::size_t header_size = 16;
 constexpr std::size_t trainer_size = 512;
 constexpr std::size_t program_bank_size = 16 * 1024;
+constexpr std::size_t program_ram_bank_size = 8 * 1024;
 constexpr std::size_t character_bank_size = 8 * 1024;
+constexpr std::uint16_t program_ram_start = 0x6000;
+constexpr std::uint16_t program_ram_end = 0x7FFF;
+constexpr std::size_t trainer_ram_offset = 0x1000;
 
 }  // namespace
 
@@ -37,6 +41,7 @@ std::shared_ptr<Cartridge> Cartridge::from_ines(std::span<const std::uint8_t> im
     const auto character_banks = image[5];
     const auto flags6 = image[6];
     const auto flags7 = image[7];
+    const auto program_ram_banks = image[8] == 0U ? 1U : image[8];
     if ((flags7 & 0x0CU) == 0x08U) {
         throw std::invalid_argument("NES 2.0 images are not supported");
     }
@@ -46,17 +51,28 @@ std::shared_ptr<Cartridge> Cartridge::from_ines(std::span<const std::uint8_t> im
 
     auto cartridge = std::shared_ptr<Cartridge>(new Cartridge());
     cartridge->mapper_id_ = static_cast<std::uint8_t>((flags7 & 0xF0U) | (flags6 >> 4U));
+    cartridge->has_battery_ = (flags6 & 0x02U) != 0U;
     if ((flags6 & 0x08U) != 0U) {
         cartridge->mirror_ = Mirror::four_screen;
     } else {
         cartridge->mirror_ = (flags6 & 0x01U) != 0U ? Mirror::vertical : Mirror::horizontal;
     }
 
-    std::size_t offset = header_size + (((flags6 & 0x04U) != 0U) ? trainer_size : 0U);
+    const auto has_trainer = (flags6 & 0x04U) != 0U;
+    std::size_t offset = header_size + (has_trainer ? trainer_size : 0U);
     const auto program_bytes = static_cast<std::size_t>(program_banks) * program_bank_size;
+    const auto program_ram_bytes =
+        static_cast<std::size_t>(program_ram_banks) * program_ram_bank_size;
     const auto character_bytes = static_cast<std::size_t>(character_banks) * character_bank_size;
     if (offset + program_bytes + character_bytes > image.size()) {
         throw std::invalid_argument("iNES image is truncated");
+    }
+
+    cartridge->program_ram_.assign(program_ram_bytes, 0);
+    if (has_trainer) {
+        std::copy_n(image.begin() + static_cast<std::ptrdiff_t>(header_size), trainer_size,
+                    cartridge->program_ram_.begin() +
+                        static_cast<std::ptrdiff_t>(trainer_ram_offset));
     }
 
     cartridge->program_memory_.assign(image.begin() + static_cast<std::ptrdiff_t>(offset),
@@ -85,6 +101,11 @@ std::shared_ptr<Cartridge> Cartridge::from_ines(std::span<const std::uint8_t> im
 }
 
 bool Cartridge::cpu_read(std::uint16_t address, std::uint8_t& value) {
+    if (address >= program_ram_start && address <= program_ram_end) {
+        value = program_ram_[address - program_ram_start];
+        return true;
+    }
+
     const auto mapped = mapper_->cpu_read(address);
     if (!mapped) {
         return false;
@@ -94,6 +115,11 @@ bool Cartridge::cpu_read(std::uint16_t address, std::uint8_t& value) {
 }
 
 bool Cartridge::cpu_write(std::uint16_t address, std::uint8_t value) {
+    if (address >= program_ram_start && address <= program_ram_end) {
+        program_ram_[address - program_ram_start] = value;
+        return true;
+    }
+
     const auto mapping = mapper_->cpu_write(address, value);
     if (!mapping.handled) {
         return false;
@@ -140,8 +166,16 @@ std::size_t Cartridge::program_size() const noexcept {
     return program_memory_.size();
 }
 
+std::size_t Cartridge::program_ram_size() const noexcept {
+    return program_ram_.size();
+}
+
 std::size_t Cartridge::character_size() const noexcept {
     return character_memory_.size();
+}
+
+bool Cartridge::has_battery() const noexcept {
+    return has_battery_;
 }
 
 }  // namespace nes
