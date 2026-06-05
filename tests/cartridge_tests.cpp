@@ -115,23 +115,40 @@ void trainer_initializes_program_ram() {
            "program ROM begins after the trainer");
 }
 
-void cartridge_rejects_invalid_images() {
+void expect_invalid_image(const std::vector<std::uint8_t>& image, std::string_view message) {
     bool rejected = false;
     try {
-        static_cast<void>(nes::Cartridge::from_ines(std::vector<std::uint8_t>(16, 0)));
+        static_cast<void>(nes::Cartridge::from_ines(image));
     } catch (const std::invalid_argument&) {
         rejected = true;
     }
-    expect(rejected, "invalid iNES magic is rejected");
+    expect(rejected, message);
+}
+
+void cartridge_rejects_invalid_images() {
+    expect_invalid_image(std::vector<std::uint8_t>(16, 0), "invalid iNES magic is rejected");
+
+    expect_invalid_image(ines_image(0, 1), "images without program ROM are rejected");
+
+    auto nes2 = ines_image(1, 1);
+    nes2[7] = 0x08;
+    expect_invalid_image(nes2, "NES 2.0 images are rejected explicitly");
+
+    auto unknown_format = ines_image(1, 1);
+    unknown_format[7] = 0x04;
+    expect_invalid_image(unknown_format, "reserved header formats are rejected");
 
     auto unsupported = ines_image(1, 1, 0x10);
-    rejected = false;
-    try {
-        static_cast<void>(nes::Cartridge::from_ines(unsupported));
-    } catch (const std::invalid_argument&) {
-        rejected = true;
-    }
-    expect(rejected, "unsupported mappers fail explicitly");
+    expect_invalid_image(unsupported, "unsupported mappers fail explicitly");
+
+    expect_invalid_image(ines_image(3, 1), "NROM rejects oversized program ROM");
+    expect_invalid_image(ines_image(1, 2), "NROM rejects oversized character ROM");
+    expect_invalid_image(ines_image(1, 0, 0x20), "UxROM requires switchable program banks");
+    expect_invalid_image(ines_image(2, 1, 0x20), "UxROM requires character RAM");
+
+    auto truncated = ines_image(1, 1);
+    truncated.pop_back();
+    expect_invalid_image(truncated, "truncated ROM payloads are rejected");
 }
 
 void uxrom_switches_lower_program_bank() {

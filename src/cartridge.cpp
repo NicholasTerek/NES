@@ -19,6 +19,29 @@ constexpr std::uint16_t program_ram_start = 0x6000;
 constexpr std::uint16_t program_ram_end = 0x7FFF;
 constexpr std::size_t trainer_ram_offset = 0x1000;
 
+bool contains_range(std::size_t image_size, std::size_t offset, std::size_t length) {
+    return offset <= image_size && length <= image_size - offset;
+}
+
+void validate_mapper_layout(std::uint8_t mapper_id,
+                            std::uint8_t program_banks,
+                            std::uint8_t character_banks) {
+    switch (mapper_id) {
+    case 0:
+        if (program_banks > 2U || character_banks > 1U) {
+            throw std::invalid_argument("NROM image has an unsupported ROM layout");
+        }
+        break;
+    case 2:
+        if (program_banks < 2U || character_banks != 0U) {
+            throw std::invalid_argument("UxROM image has an unsupported ROM layout");
+        }
+        break;
+    default:
+        throw std::invalid_argument("unsupported mapper " + std::to_string(mapper_id));
+    }
+}
+
 }  // namespace
 
 std::shared_ptr<Cartridge> Cartridge::load(const std::filesystem::path& path) {
@@ -42,8 +65,11 @@ std::shared_ptr<Cartridge> Cartridge::from_ines(std::span<const std::uint8_t> im
     const auto flags6 = image[6];
     const auto flags7 = image[7];
     const auto program_ram_banks = image[8] == 0U ? 1U : image[8];
-    if ((flags7 & 0x0CU) == 0x08U) {
-        throw std::invalid_argument("NES 2.0 images are not supported");
+    const auto format_bits = static_cast<std::uint8_t>(flags7 & 0x0CU);
+    if (format_bits != 0U) {
+        throw std::invalid_argument(format_bits == 0x08U
+                                        ? "NES 2.0 images are not supported"
+                                        : "unrecognized iNES header format");
     }
     if (program_banks == 0U) {
         throw std::invalid_argument("iNES image does not contain program ROM");
@@ -51,6 +77,7 @@ std::shared_ptr<Cartridge> Cartridge::from_ines(std::span<const std::uint8_t> im
 
     auto cartridge = std::shared_ptr<Cartridge>(new Cartridge());
     cartridge->mapper_id_ = static_cast<std::uint8_t>((flags7 & 0xF0U) | (flags6 >> 4U));
+    validate_mapper_layout(cartridge->mapper_id_, program_banks, character_banks);
     cartridge->has_battery_ = (flags6 & 0x02U) != 0U;
     if ((flags6 & 0x08U) != 0U) {
         cartridge->mirror_ = Mirror::four_screen;
@@ -64,7 +91,10 @@ std::shared_ptr<Cartridge> Cartridge::from_ines(std::span<const std::uint8_t> im
     const auto program_ram_bytes =
         static_cast<std::size_t>(program_ram_banks) * program_ram_bank_size;
     const auto character_bytes = static_cast<std::size_t>(character_banks) * character_bank_size;
-    if (offset + program_bytes + character_bytes > image.size()) {
+    if (!contains_range(image.size(), offset, program_bytes)) {
+        throw std::invalid_argument("iNES image has truncated program ROM");
+    }
+    if (!contains_range(image.size(), offset + program_bytes, character_bytes)) {
         throw std::invalid_argument("iNES image is truncated");
     }
 
@@ -94,7 +124,7 @@ std::shared_ptr<Cartridge> Cartridge::from_ines(std::span<const std::uint8_t> im
         cartridge->mapper_ = std::make_unique<Mapper2>(program_banks, character_banks);
         break;
     default:
-        throw std::invalid_argument("unsupported mapper " + std::to_string(cartridge->mapper_id_));
+        throw std::logic_error("validated mapper was not constructed");
     }
 
     return cartridge;
