@@ -26,13 +26,55 @@ void nrom_mirrors_single_program_bank() {
     expect(!mapper.cpu_read(0x7FFF), "NROM ignores expansion space");
 }
 
+void nrom_maps_two_program_banks() {
+    nes::Mapper0 mapper(2, 1);
+    expect(mapper.cpu_read(0x8000) == 0x0000, "NROM-256 maps its first byte");
+    expect(mapper.cpu_read(0xBFFF) == 0x3FFF, "NROM-256 maps its lower bank boundary");
+    expect(mapper.cpu_read(0xC000) == 0x4000, "NROM-256 maps its upper bank");
+    expect(mapper.cpu_read(0xFFFF) == 0x7FFF, "NROM-256 maps its final byte");
+
+    expect(!mapper.cpu_write(0x7FFF, 0x12).handled,
+           "NROM does not consume writes below program ROM");
+    const auto rom_write = mapper.cpu_write(0x8000, 0x12);
+    expect(rom_write.handled && !rom_write.address,
+           "NROM consumes program ROM writes without modifying storage");
+}
+
 void nrom_maps_character_memory() {
     nes::Mapper0 rom_mapper(1, 1);
+    expect(rom_mapper.ppu_read(0x0000) == 0x0000, "NROM maps the first pattern byte");
     expect(rom_mapper.ppu_read(0x1FFF) == 0x1FFF, "NROM exposes pattern memory");
-    expect(!rom_mapper.ppu_write(0x0100).address, "CHR ROM rejects writes");
+    expect(!rom_mapper.ppu_read(0x2000), "NROM stops mapping at the pattern-table edge");
+    const auto rom_write = rom_mapper.ppu_write(0x0100);
+    expect(rom_write.handled && !rom_write.address, "CHR ROM consumes writes without changing");
 
     nes::Mapper0 ram_mapper(1, 0);
-    expect(ram_mapper.ppu_write(0x0100).address == 0x0100, "CHR RAM accepts writes");
+    expect(ram_mapper.ppu_write(0x0000).address == 0x0000,
+           "CHR RAM accepts its first write");
+    expect(ram_mapper.ppu_write(0x1FFF).address == 0x1FFF,
+           "CHR RAM accepts its final write");
+    expect(!ram_mapper.ppu_write(0x2000).handled,
+           "CHR RAM rejects writes beyond pattern memory");
+}
+
+void uxrom_maps_program_boundaries() {
+    nes::Mapper2 mapper(4, 0);
+    expect(mapper.cpu_read(0x8000) == 0x0000, "UxROM starts with bank zero");
+    expect(mapper.cpu_read(0xBFFF) == 0x3FFF, "UxROM maps the switchable bank end");
+    expect(mapper.cpu_read(0xC000) == 0xC000, "UxROM fixes the last bank");
+    expect(mapper.cpu_read(0xFFFF) == 0xFFFF, "UxROM maps the fixed bank end");
+    expect(!mapper.cpu_read(0x7FFF), "UxROM ignores addresses below program ROM");
+
+    expect(!mapper.cpu_write(0x7FFF, 2).handled,
+           "UxROM ignores bank writes below program ROM");
+    expect(mapper.cpu_write(0x8000, 2).handled, "UxROM consumes bank-select writes");
+    expect(mapper.cpu_read(0x8000) == 0x8000, "UxROM selects the requested bank");
+    expect(mapper.cpu_write(0xFFFF, 5).handled,
+           "UxROM accepts bank writes across the program window");
+    expect(mapper.cpu_read(0x8000) == 0x4000,
+           "UxROM wraps bank values to available storage");
+    mapper.reset();
+    expect(mapper.cpu_read(0x8000) == 0x0000, "UxROM reset restores bank zero");
 }
 
 std::vector<std::uint8_t> ines_image(std::uint8_t program_banks,
@@ -82,6 +124,23 @@ void cartridge_allocates_character_ram() {
     std::uint8_t value = 0;
     expect(cartridge->ppu_read(0x1234, value) && value == 0xA5,
            "CHR RAM preserves written bytes");
+}
+
+void cartridge_keeps_rom_read_only() {
+    auto image = ines_image(2, 1);
+    image[16] = 0x9A;
+    image[16 + 32 * 1024] = 0xA9;
+    const auto cartridge = nes::Cartridge::from_ines(image);
+
+    std::uint8_t value = 0;
+    expect(cartridge->cpu_write(0x8000, 0x00), "cartridge handles program ROM writes");
+    expect(cartridge->cpu_read(0x8000, value) && value == 0x9A,
+           "program ROM remains unchanged after a CPU write");
+    expect(cartridge->ppu_write(0x0000, 0x00), "cartridge handles character ROM writes");
+    expect(cartridge->ppu_read(0x0000, value) && value == 0xA9,
+           "character ROM remains unchanged after a PPU write");
+    expect(!cartridge->cpu_read(0x5FFF, value), "cartridge leaves lower CPU space unmapped");
+    expect(!cartridge->ppu_read(0x2000, value), "cartridge leaves nametable space unmapped");
 }
 
 void cartridge_maps_program_ram() {
@@ -152,21 +211,21 @@ void cartridge_rejects_invalid_images() {
 }
 
 void uxrom_switches_lower_program_bank() {
-    auto image = ines_image(3, 0, 0x20);
+    auto image = ines_image(4, 0, 0x20);
     image[16] = 0x10;
     image[16 + 16 * 1024] = 0x20;
-    image[16 + 2 * 16 * 1024] = 0x30;
+    image[16 + 3 * 16 * 1024] = 0x40;
     const auto cartridge = nes::Cartridge::from_ines(image);
     std::uint8_t value = 0;
 
     expect(cartridge->cpu_read(0x8000, value) && value == 0x10,
            "UxROM starts with bank zero selected");
-    expect(cartridge->cpu_read(0xC000, value) && value == 0x30,
+    expect(cartridge->cpu_read(0xC000, value) && value == 0x40,
            "UxROM fixes the last bank at the top of memory");
     expect(cartridge->cpu_write(0x8000, 1), "UxROM consumes bank-select writes");
     expect(cartridge->cpu_read(0x8000, value) && value == 0x20,
            "UxROM selects a lower program bank");
-    expect(cartridge->cpu_read(0xC000, value) && value == 0x30,
+    expect(cartridge->cpu_read(0xC000, value) && value == 0x40,
            "UxROM keeps its fixed bank after switching");
     cartridge->reset();
     expect(cartridge->cpu_read(0x8000, value) && value == 0x10,
@@ -177,9 +236,12 @@ void uxrom_switches_lower_program_bank() {
 
 int run_cartridge_tests() {
     nrom_mirrors_single_program_bank();
+    nrom_maps_two_program_banks();
     nrom_maps_character_memory();
+    uxrom_maps_program_boundaries();
     cartridge_parses_ines_and_routes_accesses();
     cartridge_allocates_character_ram();
+    cartridge_keeps_rom_read_only();
     cartridge_maps_program_ram();
     trainer_initializes_program_ram();
     cartridge_rejects_invalid_images();
