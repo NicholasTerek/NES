@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <stdexcept>
 #include <vector>
 
 namespace {
@@ -21,6 +22,22 @@ std::shared_ptr<nes::Cartridge> nrom_cartridge() {
     image[16] = 0xA9;
     image[16U + 0x3FFCU] = 0x00;
     image[16U + 0x3FFDU] = 0x80;
+    return nes::Cartridge::from_ines(image);
+}
+
+std::shared_ptr<nes::Cartridge> uxrom_cartridge() {
+    constexpr std::size_t bank_size = 16U * 1024U;
+    std::vector<std::uint8_t> image(16U + 4U * bank_size, 0);
+    image[0] = 'N';
+    image[1] = 'E';
+    image[2] = 'S';
+    image[3] = 0x1A;
+    image[4] = 4;
+    image[6] = 0x20;
+    image[16] = 0x10;
+    image[16U + bank_size] = 0x20;
+    image[16U + 2U * bank_size] = 0x30;
+    image[16U + 3U * bank_size] = 0x40;
     return nes::Cartridge::from_ines(image);
 }
 
@@ -43,6 +60,39 @@ void cartridge_owns_the_program_rom_window() {
     expect(bus.cpu_read(0xC000) == 0xA9, "bus preserves NROM program mirroring");
     bus.cpu_write(0x8000, 0x00);
     expect(bus.cpu_read(0x8000) == 0xA9, "program ROM ignores CPU writes");
+}
+
+void cartridge_ram_is_visible_on_the_cpu_bus() {
+    nes::Bus bus;
+    bus.insert_cartridge(nrom_cartridge());
+    bus.cpu_write(0x6000, 0x57);
+    bus.cpu_write(0x7FFF, 0x75);
+    expect(bus.cpu_read(0x6000) == 0x57, "bus routes the first cartridge RAM byte");
+    expect(bus.cpu_read(0x7FFF) == 0x75, "bus routes the last cartridge RAM byte");
+}
+
+void mapper_register_writes_flow_through_the_bus() {
+    nes::Bus bus;
+    bus.insert_cartridge(uxrom_cartridge());
+    expect(bus.cpu_read(0x8000) == 0x10, "bus exposes the initial UxROM bank");
+    expect(bus.cpu_read(0xC000) == 0x40, "bus exposes the fixed UxROM bank");
+    bus.cpu_write(0x8000, 2);
+    expect(bus.cpu_read(0x8000) == 0x30, "bus forwards UxROM bank selection");
+    expect(bus.cpu_read(0xC000) == 0x40, "bank switching leaves the fixed bank intact");
+    bus.reset();
+    nes::test::drain(bus.cpu());
+    expect(bus.cpu_read(0x8000) == 0x10, "bus reset resets the cartridge mapper");
+}
+
+void empty_cartridges_are_rejected() {
+    nes::Bus bus;
+    bool rejected = false;
+    try {
+        bus.insert_cartridge(nullptr);
+    } catch (const std::invalid_argument&) {
+        rejected = true;
+    }
+    expect(rejected, "bus rejects an empty cartridge slot");
 }
 
 void reset_vector_flows_from_cartridge_to_cpu() {
@@ -69,6 +119,9 @@ int run_bus_tests() {
     const auto before = nes::test::failures;
     internal_ram_repeats_through_its_cpu_window();
     cartridge_owns_the_program_rom_window();
+    cartridge_ram_is_visible_on_the_cpu_bus();
+    mapper_register_writes_flow_through_the_bus();
+    empty_cartridges_are_rejected();
     reset_vector_flows_from_cartridge_to_cpu();
     unmapped_cpu_addresses_have_open_bus_defaults();
     return nes::test::failures - before;
