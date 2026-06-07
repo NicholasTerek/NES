@@ -2,6 +2,8 @@
 #include "nes/mapper.hpp"
 
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <stdexcept>
 #include <string_view>
@@ -174,6 +176,43 @@ void trainer_initializes_program_ram() {
            "program ROM begins after the trainer");
 }
 
+void cartridge_loads_ines_files() {
+    auto image = ines_image(1, 1, 0x01);
+    image[16] = 0x6A;
+    const auto path = std::filesystem::temp_directory_path() / "nes-cartridge-load-test.nes";
+    {
+        std::ofstream stream(path, std::ios::binary | std::ios::trunc);
+        expect(static_cast<bool>(stream), "cartridge test ROM can be created");
+        stream.write(reinterpret_cast<const char*>(image.data()),
+                     static_cast<std::streamsize>(image.size()));
+        expect(static_cast<bool>(stream), "cartridge test ROM can be written");
+    }
+
+    const auto cartridge = nes::Cartridge::load(path);
+    std::error_code error;
+    std::filesystem::remove(path, error);
+    expect(!error, "cartridge test ROM is removed after loading");
+    expect(cartridge->mirror() == nes::Mirror::vertical,
+           "file loader preserves cartridge header metadata");
+    std::uint8_t value = 0;
+    expect(cartridge->cpu_read(0x8000, value) && value == 0x6A,
+           "file loader preserves cartridge program data");
+}
+
+void cartridge_reports_missing_files() {
+    const auto path = std::filesystem::temp_directory_path() / "nes-missing-cartridge.nes";
+    std::error_code error;
+    std::filesystem::remove(path, error);
+
+    bool rejected = false;
+    try {
+        static_cast<void>(nes::Cartridge::load(path));
+    } catch (const std::runtime_error&) {
+        rejected = true;
+    }
+    expect(rejected, "missing cartridge files fail explicitly");
+}
+
 void expect_invalid_image(const std::vector<std::uint8_t>& image, std::string_view message) {
     bool rejected = false;
     try {
@@ -244,6 +283,8 @@ int run_cartridge_tests() {
     cartridge_keeps_rom_read_only();
     cartridge_maps_program_ram();
     trainer_initializes_program_ram();
+    cartridge_loads_ines_files();
+    cartridge_reports_missing_files();
     cartridge_rejects_invalid_images();
     uxrom_switches_lower_program_bank();
     return failures;
