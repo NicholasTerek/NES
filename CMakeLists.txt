@@ -39,6 +39,7 @@ if(NES_BUILD_TESTS)
         tests/cartridge_tests.cpp
         tests/bus_tests.cpp
         tests/ppu_memory_tests.cpp
+        tests/ppu_register_tests.cpp
     )
     target_link_libraries(nes_tests PRIVATE nes_core)
     add_test(NAME nes_tests COMMAND nes_tests)
