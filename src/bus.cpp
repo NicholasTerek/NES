@@ -14,12 +14,14 @@ void Bus::insert_cartridge(std::shared_ptr<Cartridge> cartridge) {
         throw std::invalid_argument("cannot insert an empty cartridge");
     }
     cartridge_ = std::move(cartridge);
+    ppu_.connect_cartridge(cartridge_);
 }
 
 void Bus::reset() {
     if (cartridge_) {
         cartridge_->reset();
     }
+    ppu_.reset();
     cpu_.reset();
 }
 
@@ -33,6 +35,14 @@ Cpu& Bus::cpu() noexcept {
 
 const Cpu& Bus::cpu() const noexcept {
     return cpu_;
+}
+
+Ppu& Bus::ppu() noexcept {
+    return ppu_;
+}
+
+const Ppu& Bus::ppu() const noexcept {
+    return ppu_;
 }
 
 std::shared_ptr<Cartridge> Bus::cartridge() const noexcept {
@@ -49,6 +59,9 @@ std::uint8_t Bus::cpu_read(std::uint16_t address, bool read_only) {
     if (address <= 0x1FFFU) {
         return cpu_ram_[address & 0x07FFU];
     }
+    if (address <= 0x3FFFU) {
+        return ppu_.cpu_read(static_cast<std::uint16_t>(address & 0x0007U), read_only);
+    }
     return 0;
 }
 
@@ -58,6 +71,10 @@ void Bus::cpu_write(std::uint16_t address, std::uint8_t value) {
     }
     if (address <= 0x1FFFU) {
         cpu_ram_[address & 0x07FFU] = value;
+        return;
+    }
+    if (address <= 0x3FFFU) {
+        ppu_.cpu_write(static_cast<std::uint16_t>(address & 0x0007U), value);
     }
 }
 

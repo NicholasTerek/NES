@@ -41,6 +41,16 @@ std::shared_ptr<nes::Cartridge> uxrom_cartridge() {
     return nes::Cartridge::from_ines(image);
 }
 
+std::shared_ptr<nes::Cartridge> chr_ram_cartridge() {
+    std::vector<std::uint8_t> image(16U + 16U * 1024U, 0);
+    image[0] = 'N';
+    image[1] = 'E';
+    image[2] = 'S';
+    image[3] = 0x1A;
+    image[4] = 1;
+    return nes::Cartridge::from_ines(image);
+}
+
 void internal_ram_repeats_through_its_cpu_window() {
     nes::Bus bus;
     bus.cpu_write(0x0002, 0x5A);
@@ -84,6 +94,37 @@ void mapper_register_writes_flow_through_the_bus() {
     expect(bus.cpu_read(0x8000) == 0x10, "bus reset resets the cartridge mapper");
 }
 
+void ppu_registers_repeat_through_the_cpu_window() {
+    nes::Bus bus;
+    bus.cpu_write(0x2008, 0x04);
+    expect(bus.cpu_read(0x2000, true) == 0x04, "bus mirrors PPUCTRL every eight bytes");
+
+    bus.cpu_write(0x3FFE, 0x3F);
+    bus.cpu_write(0x2006, 0x00);
+    bus.cpu_write(0x2007, 0x2A);
+    expect(bus.ppu().ppu_read(0x3F00) == 0x2A,
+           "bus routes mirrored PPUADDR and PPUDATA writes");
+}
+
+void cartridge_character_memory_is_connected_to_the_ppu() {
+    nes::Bus bus;
+    const auto cartridge = chr_ram_cartridge();
+    bus.insert_cartridge(cartridge);
+    bus.ppu().ppu_write(0x1234, 0xA5);
+    expect(bus.ppu().ppu_read(0x1234) == 0xA5,
+           "inserting a cartridge connects its character memory to the PPU");
+    expect(bus.cartridge() == cartridge, "CPU and PPU share the inserted cartridge");
+}
+
+void reset_clears_ppu_register_state() {
+    nes::Bus bus;
+    bus.cpu_write(0x2000, 0x80);
+    bus.cpu_write(0x2005, 0xFF);
+    bus.reset();
+    expect(bus.ppu().state().control == 0, "bus reset clears PPUCTRL");
+    expect(!bus.ppu().state().write_latch, "bus reset clears the PPU write latch");
+}
+
 void empty_cartridges_are_rejected() {
     nes::Bus bus;
     bool rejected = false;
@@ -121,6 +162,9 @@ int run_bus_tests() {
     cartridge_owns_the_program_rom_window();
     cartridge_ram_is_visible_on_the_cpu_bus();
     mapper_register_writes_flow_through_the_bus();
+    ppu_registers_repeat_through_the_cpu_window();
+    cartridge_character_memory_is_connected_to_the_ppu();
+    reset_clears_ppu_register_state();
     empty_cartridges_are_rejected();
     reset_vector_flows_from_cartridge_to_cpu();
     unmapped_cpu_addresses_have_open_bus_defaults();
