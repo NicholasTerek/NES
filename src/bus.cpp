@@ -23,10 +23,15 @@ void Bus::reset() {
     }
     ppu_.reset();
     cpu_.reset();
+    system_clock_counter_ = 0;
 }
 
 void Bus::clock() {
-    cpu_.clock();
+    ppu_.clock();
+    if (system_clock_counter_ % 3U == 0U) {
+        cpu_.clock();
+    }
+    ++system_clock_counter_;
 }
 
 Cpu& Bus::cpu() noexcept {
@@ -43,6 +48,10 @@ Ppu& Bus::ppu() noexcept {
 
 const Ppu& Bus::ppu() const noexcept {
     return ppu_;
+}
+
+std::uint64_t Bus::system_clock() const noexcept {
+    return system_clock_counter_;
 }
 
 std::shared_ptr<Cartridge> Bus::cartridge() const noexcept {

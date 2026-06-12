@@ -150,6 +150,25 @@ void Ppu::ppu_write(std::uint16_t address, std::uint8_t value) {
     palette_ram_[palette_index(address)] = static_cast<std::uint8_t>(value & 0x3FU);
 }
 
+void Ppu::clock() {
+    if (scanline_ == -1 && cycle_ == 1) {
+        status_ = static_cast<std::uint8_t>(status_ & ~status_vertical_blank);
+    }
+    if (scanline_ == 241 && cycle_ == 1) {
+        status_ = static_cast<std::uint8_t>(status_ | status_vertical_blank);
+    }
+
+    ++cycle_;
+    if (cycle_ >= 341) {
+        cycle_ = 0;
+        ++scanline_;
+        if (scanline_ >= 261) {
+            scanline_ = -1;
+            frame_complete_ = true;
+        }
+    }
+}
+
 void Ppu::reset() {
     control_ = 0;
     mask_ = 0;
@@ -160,11 +179,19 @@ void Ppu::reset() {
     write_latch_ = false;
     data_buffer_ = 0;
     open_bus_ = 0;
+    scanline_ = -1;
+    cycle_ = 0;
+    frame_complete_ = false;
 }
 
 Ppu::State Ppu::state() const noexcept {
-    return {control_,         mask_,         status_,     vram_address_,
-            temporary_address_, fine_x_,      write_latch_, data_buffer_};
+    return {control_,          mask_,       status_,         vram_address_,
+            temporary_address_, fine_x_,     write_latch_,    data_buffer_,
+            scanline_,         cycle_,      frame_complete_};
+}
+
+void Ppu::clear_frame_complete() noexcept {
+    frame_complete_ = false;
 }
 
 std::size_t Ppu::nametable_index(std::uint16_t address) const {

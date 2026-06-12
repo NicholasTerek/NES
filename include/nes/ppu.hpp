@@ -23,6 +23,9 @@ public:
         std::uint8_t fine_x = 0;
         bool write_latch = false;
         std::uint8_t data_buffer = 0;
+        std::int16_t scanline = -1;
+        std::int16_t cycle = 0;
+        bool frame_complete = false;
     };
 
     void connect_cartridge(std::shared_ptr<Cartridge> cartridge);
@@ -34,8 +37,10 @@ public:
     [[nodiscard]] std::uint8_t ppu_read(std::uint16_t address,
                                         bool read_only = false);
     void ppu_write(std::uint16_t address, std::uint8_t value);
+    void clock();
     void reset();
     [[nodiscard]] State state() const noexcept;
+    void clear_frame_complete() noexcept;
 
 private:
     [[nodiscard]] std::size_t nametable_index(std::uint16_t address) const;
@@ -55,6 +60,9 @@ private:
     bool write_latch_ = false;
     std::uint8_t data_buffer_ = 0;
     std::uint8_t open_bus_ = 0;
+    std::int16_t scanline_ = -1;
+    std::int16_t cycle_ = 0;
+    bool frame_complete_ = false;
 };
 
 }  // namespace nes
