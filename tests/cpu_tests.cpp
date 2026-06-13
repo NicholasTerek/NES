@@ -317,6 +317,7 @@ int run_bus_tests();
 int run_ppu_memory_tests();
 int run_ppu_register_tests();
 int run_ppu_timing_tests();
+int run_ppu_background_tests();
 
 int main() {
     reset_uses_vector();
@@ -340,6 +341,7 @@ int main() {
     static_cast<void>(run_ppu_memory_tests());
     static_cast<void>(run_ppu_register_tests());
     static_cast<void>(run_ppu_timing_tests());
+    static_cast<void>(run_ppu_background_tests());
 
     if (failures != 0) {
         std::cerr << failures << " test(s) failed\n";

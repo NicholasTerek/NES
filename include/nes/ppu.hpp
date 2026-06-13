@@ -26,6 +26,14 @@ public:
         std::int16_t scanline = -1;
         std::int16_t cycle = 0;
         bool frame_complete = false;
+        std::uint8_t next_tile_id = 0;
+        std::uint8_t next_tile_attribute = 0;
+        std::uint8_t next_tile_low = 0;
+        std::uint8_t next_tile_high = 0;
+        std::uint16_t pattern_shift_low = 0;
+        std::uint16_t pattern_shift_high = 0;
+        std::uint16_t attribute_shift_low = 0;
+        std::uint16_t attribute_shift_high = 0;
     };
 
     void connect_cartridge(std::shared_ptr<Cartridge> cartridge);
@@ -45,6 +53,10 @@ public:
 private:
     [[nodiscard]] std::size_t nametable_index(std::uint16_t address) const;
     [[nodiscard]] static std::size_t palette_index(std::uint16_t address);
+    [[nodiscard]] bool rendering_enabled() const noexcept;
+    void fetch_background_data();
+    void load_background_shifters();
+    void update_background_shifters();
 
     std::array<std::uint8_t, 8U * 1024U> pattern_ram_{};
     std::array<std::uint8_t, 4U * 1024U> nametable_ram_{};
@@ -63,6 +75,15 @@ private:
     std::int16_t scanline_ = -1;
     std::int16_t cycle_ = 0;
     bool frame_complete_ = false;
+
+    std::uint8_t next_tile_id_ = 0;
+    std::uint8_t next_tile_attribute_ = 0;
+    std::uint8_t next_tile_low_ = 0;
+    std::uint8_t next_tile_high_ = 0;
+    std::uint16_t pattern_shift_low_ = 0;
+    std::uint16_t pattern_shift_high_ = 0;
+    std::uint16_t attribute_shift_low_ = 0;
+    std::uint16_t attribute_shift_high_ = 0;
 };
 
 }  // namespace nes

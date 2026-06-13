@@ -9,7 +9,10 @@ namespace nes {
 namespace {
 
 constexpr std::uint8_t control_increment_mode = 0x04;
+constexpr std::uint8_t control_background_pattern = 0x10;
 constexpr std::uint8_t mask_grayscale = 0x01;
+constexpr std::uint8_t mask_render_background = 0x08;
+constexpr std::uint8_t mask_render_sprites = 0x10;
 constexpr std::uint8_t status_vertical_blank = 0x80;
 
 }  // namespace
@@ -158,6 +161,20 @@ void Ppu::clock() {
         status_ = static_cast<std::uint8_t>(status_ | status_vertical_blank);
     }
 
+    if (scanline_ >= -1 && scanline_ < 240 && rendering_enabled()) {
+        if ((cycle_ >= 2 && cycle_ < 258) || (cycle_ >= 321 && cycle_ < 338)) {
+            update_background_shifters();
+            fetch_background_data();
+        }
+        if (cycle_ == 257) {
+            load_background_shifters();
+        }
+        if (cycle_ == 338 || cycle_ == 340) {
+            next_tile_id_ = ppu_read(
+                static_cast<std::uint16_t>(0x2000U | (vram_address_ & 0x0FFFU)));
+        }
+    }
+
     ++cycle_;
     if (cycle_ >= 341) {
         cycle_ = 0;
@@ -182,16 +199,100 @@ void Ppu::reset() {
     scanline_ = -1;
     cycle_ = 0;
     frame_complete_ = false;
+    next_tile_id_ = 0;
+    next_tile_attribute_ = 0;
+    next_tile_low_ = 0;
+    next_tile_high_ = 0;
+    pattern_shift_low_ = 0;
+    pattern_shift_high_ = 0;
+    attribute_shift_low_ = 0;
+    attribute_shift_high_ = 0;
 }
 
 Ppu::State Ppu::state() const noexcept {
     return {control_,          mask_,       status_,         vram_address_,
             temporary_address_, fine_x_,     write_latch_,    data_buffer_,
-            scanline_,         cycle_,      frame_complete_};
+            scanline_,         cycle_,      frame_complete_, next_tile_id_,
+            next_tile_attribute_, next_tile_low_, next_tile_high_, pattern_shift_low_,
+            pattern_shift_high_, attribute_shift_low_, attribute_shift_high_};
 }
 
 void Ppu::clear_frame_complete() noexcept {
     frame_complete_ = false;
+}
+
+bool Ppu::rendering_enabled() const noexcept {
+    return (mask_ & (mask_render_background | mask_render_sprites)) != 0U;
+}
+
+void Ppu::fetch_background_data() {
+    const auto phase = static_cast<std::uint8_t>((cycle_ - 1) & 0x0007);
+    const auto coarse_x = static_cast<std::uint8_t>(vram_address_ & 0x001FU);
+    const auto coarse_y = static_cast<std::uint8_t>((vram_address_ >> 5U) & 0x001FU);
+
+    switch (phase) {
+    case 0:
+        load_background_shifters();
+        next_tile_id_ = ppu_read(
+            static_cast<std::uint16_t>(0x2000U | (vram_address_ & 0x0FFFU)));
+        break;
+    case 2: {
+        const auto attribute_address = static_cast<std::uint16_t>(
+            0x23C0U | (vram_address_ & 0x0C00U) |
+            (static_cast<std::uint16_t>(coarse_y >> 2U) << 3U) |
+            static_cast<std::uint16_t>(coarse_x >> 2U));
+        auto attribute = ppu_read(attribute_address);
+        if ((coarse_y & 0x02U) != 0U) {
+            attribute = static_cast<std::uint8_t>(attribute >> 4U);
+        }
+        if ((coarse_x & 0x02U) != 0U) {
+            attribute = static_cast<std::uint8_t>(attribute >> 2U);
+        }
+        next_tile_attribute_ = static_cast<std::uint8_t>(attribute & 0x03U);
+        break;
+    }
+    case 4: {
+        const auto pattern_base = static_cast<std::uint16_t>(
+            (control_ & control_background_pattern) != 0U ? 0x1000U : 0x0000U);
+        const auto fine_y = static_cast<std::uint16_t>((vram_address_ >> 12U) & 0x0007U);
+        next_tile_low_ = ppu_read(static_cast<std::uint16_t>(
+            pattern_base + static_cast<std::uint16_t>(next_tile_id_) * 16U + fine_y));
+        break;
+    }
+    case 6: {
+        const auto pattern_base = static_cast<std::uint16_t>(
+            (control_ & control_background_pattern) != 0U ? 0x1000U : 0x0000U);
+        const auto fine_y = static_cast<std::uint16_t>((vram_address_ >> 12U) & 0x0007U);
+        next_tile_high_ = ppu_read(static_cast<std::uint16_t>(
+            pattern_base + static_cast<std::uint16_t>(next_tile_id_) * 16U + fine_y + 8U));
+        break;
+    }
+    default:
+        break;
+    }
+}
+
+void Ppu::load_background_shifters() {
+    pattern_shift_low_ = static_cast<std::uint16_t>(
+        (pattern_shift_low_ & 0xFF00U) | next_tile_low_);
+    pattern_shift_high_ = static_cast<std::uint16_t>(
+        (pattern_shift_high_ & 0xFF00U) | next_tile_high_);
+    attribute_shift_low_ = static_cast<std::uint16_t>(
+        (attribute_shift_low_ & 0xFF00U) |
+        ((next_tile_attribute_ & 0x01U) != 0U ? 0x00FFU : 0x0000U));
+    attribute_shift_high_ = static_cast<std::uint16_t>(
+        (attribute_shift_high_ & 0xFF00U) |
+        ((next_tile_attribute_ & 0x02U) != 0U ? 0x00FFU : 0x0000U));
+}
+
+void Ppu::update_background_shifters() {
+    if ((mask_ & mask_render_background) == 0U) {
+        return;
+    }
+    pattern_shift_low_ = static_cast<std::uint16_t>(pattern_shift_low_ << 1U);
+    pattern_shift_high_ = static_cast<std::uint16_t>(pattern_shift_high_ << 1U);
+    attribute_shift_low_ = static_cast<std::uint16_t>(attribute_shift_low_ << 1U);
+    attribute_shift_high_ = static_cast<std::uint16_t>(attribute_shift_high_ << 1U);
 }
 
 std::size_t Ppu::nametable_index(std::uint16_t address) const {
