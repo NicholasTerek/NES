@@ -57,6 +57,10 @@ private:
     void fetch_background_data();
     void load_background_shifters();
     void update_background_shifters();
+    void increment_scroll_x();
+    void increment_scroll_y();
+    void transfer_scroll_x();
+    void transfer_scroll_y();
 
     std::array<std::uint8_t, 8U * 1024U> pattern_ram_{};
     std::array<std::uint8_t, 4U * 1024U> nametable_ram_{};

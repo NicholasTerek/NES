@@ -20,10 +20,22 @@ std::shared_ptr<nes::Cartridge> background_cartridge() {
     return nes::Cartridge::from_ines(image);
 }
 
+void clock_until(nes::Ppu& ppu, std::int16_t scanline, std::int16_t cycle) {
+    constexpr std::uint32_t frame_clocks = 341U * 262U;
+    for (std::uint32_t count = 0; count < frame_clocks; ++count) {
+        const auto state = ppu.state();
+        if (state.scanline == scanline && state.cycle == cycle) {
+            return;
+        }
+        ppu.clock();
+    }
+    expect(false, "background test reached the requested PPU position");
+}
+
 void background_pipeline_fetches_tile_data() {
     nes::Ppu ppu;
     ppu.connect_cartridge(background_cartridge());
-    ppu.ppu_write(0x2000, 3);
+    ppu.ppu_write(0x2001, 3);
     ppu.ppu_write(0x23C0, 0x03);
     ppu.ppu_write(0x0030, 0x80);
     ppu.ppu_write(0x0038, 0x40);
@@ -43,7 +55,7 @@ void background_pipeline_fetches_tile_data() {
 void background_pipeline_loads_pattern_and_attribute_shifters() {
     nes::Ppu ppu;
     ppu.connect_cartridge(background_cartridge());
-    ppu.ppu_write(0x2000, 1);
+    ppu.ppu_write(0x2001, 1);
     ppu.ppu_write(0x23C0, 0x03);
     ppu.ppu_write(0x0010, 0xAA);
     ppu.ppu_write(0x0018, 0x55);
@@ -66,7 +78,7 @@ void background_pipeline_loads_pattern_and_attribute_shifters() {
 void control_selects_the_background_pattern_table() {
     nes::Ppu ppu;
     ppu.connect_cartridge(background_cartridge());
-    ppu.ppu_write(0x2000, 2);
+    ppu.ppu_write(0x2001, 2);
     ppu.ppu_write(0x0020, 0x11);
     ppu.ppu_write(0x1020, 0x77);
     ppu.cpu_write(0x2000, 0x10);
@@ -79,6 +91,48 @@ void control_selects_the_background_pattern_table() {
            "PPUCTRL selects the upper background pattern table");
 }
 
+void horizontal_scroll_crosses_nametable_boundaries() {
+    nes::Ppu ppu;
+    ppu.cpu_write(0x2006, 0x00);
+    ppu.cpu_write(0x2006, 0x1F);
+    ppu.cpu_write(0x2001, 0x08);
+    for (int count = 0; count < 9; ++count) {
+        ppu.clock();
+    }
+    const auto address = ppu.state().vram_address;
+    expect((address & 0x001FU) == 0, "coarse X wraps after tile 31");
+    expect((address & 0x0400U) != 0U, "coarse X wrap switches horizontal nametables");
+}
+
+void pre_render_cycles_copy_the_scroll_address() {
+    nes::Ppu ppu;
+    ppu.cpu_write(0x2005, 0xAD);
+    ppu.cpu_write(0x2005, 0x6B);
+    ppu.cpu_write(0x2000, 0x03);
+    ppu.cpu_write(0x2001, 0x08);
+    clock_until(ppu, -1, 305);
+
+    const auto state = ppu.state();
+    expect((state.vram_address & 0x041FU) == (state.temporary_address & 0x041FU),
+           "cycle 257 copies horizontal scroll bits");
+    expect((state.vram_address & 0x7BE0U) == (state.temporary_address & 0x7BE0U),
+           "pre-render cycles copy vertical scroll bits");
+    expect(state.fine_x == 5, "fine X remains separate from the loopy address");
+}
+
+void vertical_scroll_wraps_the_visible_nametable() {
+    nes::Ppu ppu;
+    ppu.cpu_write(0x2005, 0x00);
+    ppu.cpu_write(0x2005, 0xEF);
+    ppu.cpu_write(0x2001, 0x08);
+    clock_until(ppu, 0, 257);
+
+    const auto address = ppu.state().vram_address;
+    expect((address & 0x7000U) == 0, "fine Y wraps after scanline seven");
+    expect((address & 0x03E0U) == 0, "coarse Y wraps after visible row 29");
+    expect((address & 0x0800U) != 0U, "vertical wrap switches nametables");
+}
+
 }  // namespace
 
 int run_ppu_background_tests() {
@@ -86,5 +140,8 @@ int run_ppu_background_tests() {
     background_pipeline_fetches_tile_data();
     background_pipeline_loads_pattern_and_attribute_shifters();
     control_selects_the_background_pattern_table();
+    horizontal_scroll_crosses_nametable_boundaries();
+    pre_render_cycles_copy_the_scroll_address();
+    vertical_scroll_wraps_the_visible_nametable();
     return nes::test::failures - before;
 }

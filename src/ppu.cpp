@@ -168,10 +168,17 @@ void Ppu::clock() {
         }
         if (cycle_ == 257) {
             load_background_shifters();
+            transfer_scroll_x();
+        }
+        if (cycle_ == 256) {
+            increment_scroll_y();
         }
         if (cycle_ == 338 || cycle_ == 340) {
             next_tile_id_ = ppu_read(
                 static_cast<std::uint16_t>(0x2000U | (vram_address_ & 0x0FFFU)));
+        }
+        if (scanline_ == -1 && cycle_ >= 280 && cycle_ < 305) {
+            transfer_scroll_y();
         }
     }
 
@@ -267,6 +274,9 @@ void Ppu::fetch_background_data() {
             pattern_base + static_cast<std::uint16_t>(next_tile_id_) * 16U + fine_y + 8U));
         break;
     }
+    case 7:
+        increment_scroll_x();
+        break;
     default:
         break;
     }
@@ -293,6 +303,55 @@ void Ppu::update_background_shifters() {
     pattern_shift_high_ = static_cast<std::uint16_t>(pattern_shift_high_ << 1U);
     attribute_shift_low_ = static_cast<std::uint16_t>(attribute_shift_low_ << 1U);
     attribute_shift_high_ = static_cast<std::uint16_t>(attribute_shift_high_ << 1U);
+}
+
+void Ppu::increment_scroll_x() {
+    if (!rendering_enabled()) {
+        return;
+    }
+    if ((vram_address_ & 0x001FU) == 31U) {
+        vram_address_ = static_cast<std::uint16_t>(vram_address_ & ~0x001FU);
+        vram_address_ = static_cast<std::uint16_t>(vram_address_ ^ 0x0400U);
+    } else {
+        ++vram_address_;
+    }
+}
+
+void Ppu::increment_scroll_y() {
+    if (!rendering_enabled()) {
+        return;
+    }
+    if ((vram_address_ & 0x7000U) != 0x7000U) {
+        vram_address_ = static_cast<std::uint16_t>(vram_address_ + 0x1000U);
+        return;
+    }
+
+    vram_address_ = static_cast<std::uint16_t>(vram_address_ & ~0x7000U);
+    auto coarse_y = static_cast<std::uint8_t>((vram_address_ >> 5U) & 0x001FU);
+    if (coarse_y == 29U) {
+        coarse_y = 0;
+        vram_address_ = static_cast<std::uint16_t>(vram_address_ ^ 0x0800U);
+    } else if (coarse_y == 31U) {
+        coarse_y = 0;
+    } else {
+        ++coarse_y;
+    }
+    vram_address_ = static_cast<std::uint16_t>(
+        (vram_address_ & ~0x03E0U) | (static_cast<std::uint16_t>(coarse_y) << 5U));
+}
+
+void Ppu::transfer_scroll_x() {
+    if (rendering_enabled()) {
+        vram_address_ = static_cast<std::uint16_t>(
+            (vram_address_ & ~0x041FU) | (temporary_address_ & 0x041FU));
+    }
+}
+
+void Ppu::transfer_scroll_y() {
+    if (rendering_enabled()) {
+        vram_address_ = static_cast<std::uint16_t>(
+            (vram_address_ & ~0x7BE0U) | (temporary_address_ & 0x7BE0U));
+    }
 }
 
 std::size_t Ppu::nametable_index(std::uint16_t address) const {
