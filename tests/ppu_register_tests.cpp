@@ -67,6 +67,8 @@ void data_reads_use_the_internal_buffer() {
     ppu.cpu_write(0x2006, 0x3F);
     ppu.cpu_write(0x2006, 0x00);
     expect(ppu.cpu_read(0x2007) == 0x2C, "palette reads bypass the PPU data buffer");
+    expect(ppu.state().data_buffer == ppu.ppu_read(0x2F00),
+           "palette reads fill the buffer from the mirrored nametable address");
 }
 
 void status_reads_reset_the_shared_write_latch() {

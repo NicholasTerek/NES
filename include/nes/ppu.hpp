@@ -27,6 +27,7 @@ public:
         std::int16_t scanline = -1;
         std::int16_t cycle = 0;
         bool frame_complete = false;
+        bool odd_frame = false;
         std::uint8_t next_tile_id = 0;
         std::uint8_t next_tile_attribute = 0;
         std::uint8_t next_tile_low = 0;
@@ -86,6 +87,7 @@ private:
     std::int16_t scanline_ = -1;
     std::int16_t cycle_ = 0;
     bool frame_complete_ = false;
+    bool odd_frame_ = false;
     bool nmi_pending_ = false;
 
     std::uint8_t next_tile_id_ = 0;

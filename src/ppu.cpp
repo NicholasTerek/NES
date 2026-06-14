@@ -196,6 +196,12 @@ void Ppu::clock() {
         render_background_pixel();
     }
 
+    if (scanline_ == -1 && cycle_ == 339 && odd_frame_ && rendering_enabled()) {
+        cycle_ = 0;
+        scanline_ = 0;
+        return;
+    }
+
     ++cycle_;
     if (cycle_ >= 341) {
         cycle_ = 0;
@@ -203,6 +209,7 @@ void Ppu::clock() {
         if (scanline_ >= 261) {
             scanline_ = -1;
             frame_complete_ = true;
+            odd_frame_ = !odd_frame_;
         }
     }
 }
@@ -220,6 +227,7 @@ void Ppu::reset() {
     scanline_ = -1;
     cycle_ = 0;
     frame_complete_ = false;
+    odd_frame_ = false;
     nmi_pending_ = false;
     next_tile_id_ = 0;
     next_tile_attribute_ = 0;
@@ -235,7 +243,7 @@ void Ppu::reset() {
 Ppu::State Ppu::state() const noexcept {
     return {control_,          mask_,       status_,         vram_address_,
             temporary_address_, fine_x_,     write_latch_,    data_buffer_,
-            scanline_,         cycle_,      frame_complete_, next_tile_id_,
+            scanline_,         cycle_,      frame_complete_, odd_frame_, next_tile_id_,
             next_tile_attribute_, next_tile_low_, next_tile_high_, pattern_shift_low_,
             pattern_shift_high_, attribute_shift_low_, attribute_shift_high_, nmi_pending_};
 }

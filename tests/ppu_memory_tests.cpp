@@ -81,6 +81,15 @@ void palette_memory_applies_hardware_mirrors() {
     expect(ppu.ppu_read(0x3F24) == 0x3F, "palette RAM repeats every 32 bytes");
 }
 
+void reset_preserves_video_memory() {
+    nes::Ppu ppu;
+    ppu.ppu_write(0x2000, 0x5A);
+    ppu.ppu_write(0x3F00, 0x2A);
+    ppu.reset();
+    expect(ppu.ppu_read(0x2000) == 0x5A, "PPU reset preserves nametable RAM");
+    expect(ppu.ppu_read(0x3F00) == 0x2A, "PPU reset preserves palette RAM");
+}
+
 }  // namespace
 
 int run_ppu_memory_tests() {
@@ -90,5 +99,6 @@ int run_ppu_memory_tests() {
     horizontal_nametable_mirroring_uses_table_pairs();
     four_screen_mirroring_keeps_tables_independent();
     palette_memory_applies_hardware_mirrors();
+    reset_preserves_video_memory();
     return nes::test::failures - before;
 }

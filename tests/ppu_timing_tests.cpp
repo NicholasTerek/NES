@@ -56,6 +56,48 @@ void vertical_blank_tracks_the_timing_window() {
            "pre-render scanline clears the vertical blank flag");
 }
 
+std::uint32_t clocks_to_frame(nes::Ppu& ppu) {
+    std::uint32_t clocks = 0;
+    while (!ppu.state().frame_complete && clocks <= 341U * 262U) {
+        ppu.clock();
+        ++clocks;
+    }
+    return clocks;
+}
+
+void odd_rendering_frames_skip_one_ppu_clock() {
+    nes::Ppu ppu;
+    ppu.cpu_write(0x2001, 0x08);
+    expect(clocks_to_frame(ppu) == 341U * 262U, "even rendering frame uses every PPU dot");
+    expect(ppu.state().odd_frame, "PPU tracks odd frame parity");
+    ppu.clear_frame_complete();
+    expect(clocks_to_frame(ppu) == 341U * 262U - 1U,
+           "odd rendering frame skips one pre-render dot");
+    expect(!ppu.state().odd_frame, "frame parity returns to even after the odd frame");
+}
+
+void disabled_rendering_keeps_full_length_frames() {
+    nes::Ppu ppu;
+    expect(clocks_to_frame(ppu) == 341U * 262U, "disabled even frame has full length");
+    ppu.clear_frame_complete();
+    expect(clocks_to_frame(ppu) == 341U * 262U,
+           "disabled odd frame does not apply the rendering cycle skip");
+}
+
+void status_reads_acknowledge_vertical_blank() {
+    nes::Ppu ppu;
+    clock_until(ppu, 241, 1);
+    ppu.clock();
+    expect((ppu.cpu_read(0x2002, true) & 0x80U) != 0U,
+           "read-only PPUSTATUS inspection observes vertical blank");
+    expect((ppu.state().status & 0x80U) != 0U,
+           "read-only PPUSTATUS inspection has no side effects");
+    expect((ppu.cpu_read(0x2002) & 0x80U) != 0U,
+           "live PPUSTATUS read returns the vertical blank flag");
+    expect((ppu.state().status & 0x80U) == 0U,
+           "live PPUSTATUS read acknowledges vertical blank");
+}
+
 void system_clock_runs_the_ppu_three_times_faster() {
     nes::Bus bus;
     bus.reset();
@@ -123,6 +165,9 @@ int run_ppu_timing_tests() {
     const auto before = nes::test::failures;
     ppu_steps_across_scanlines_and_frames();
     vertical_blank_tracks_the_timing_window();
+    odd_rendering_frames_skip_one_ppu_clock();
+    disabled_rendering_keeps_full_length_frames();
+    status_reads_acknowledge_vertical_blank();
     system_clock_runs_the_ppu_three_times_faster();
     vertical_blank_raises_one_nmi_request();
     enabling_nmi_during_vertical_blank_requests_it_immediately();
