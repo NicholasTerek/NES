@@ -28,6 +28,9 @@ void Bus::reset() {
 
 void Bus::clock() {
     ppu_.clock();
+    if (ppu_.poll_nmi()) {
+        cpu_.nmi();
+    }
     if (system_clock_counter_ % 3U == 0U) {
         cpu_.clock();
     }

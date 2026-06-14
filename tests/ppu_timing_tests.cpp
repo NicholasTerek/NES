@@ -1,8 +1,12 @@
 #include "nes/bus.hpp"
+#include "nes/cartridge.hpp"
 #include "nes/ppu.hpp"
 #include "test_harness.hpp"
 
+#include <algorithm>
 #include <cstdint>
+#include <memory>
+#include <vector>
 
 namespace {
 
@@ -65,6 +69,54 @@ void system_clock_runs_the_ppu_three_times_faster() {
     expect(bus.ppu().state().cycle == 9, "PPU receives every master clock");
 }
 
+void vertical_blank_raises_one_nmi_request() {
+    nes::Ppu ppu;
+    ppu.cpu_write(0x2000, 0x80);
+    clock_until(ppu, 241, 1);
+    ppu.clock();
+    expect(ppu.state().nmi_pending, "enabled PPU raises an NMI at vertical blank");
+    expect(ppu.poll_nmi(), "PPU exposes its pending NMI to the system bus");
+    expect(!ppu.poll_nmi(), "PPU NMI request is consumed exactly once");
+}
+
+void enabling_nmi_during_vertical_blank_requests_it_immediately() {
+    nes::Ppu ppu;
+    clock_until(ppu, 241, 1);
+    ppu.clock();
+    expect(!ppu.state().nmi_pending, "disabled NMI does not fire at vertical blank");
+    ppu.cpu_write(0x2000, 0x80);
+    expect(ppu.state().nmi_pending, "enabling NMI during vertical blank requests one");
+}
+
+std::shared_ptr<nes::Cartridge> nmi_cartridge() {
+    std::vector<std::uint8_t> image(16U + 16U * 1024U + 8U * 1024U, 0);
+    image[0] = 'N';
+    image[1] = 'E';
+    image[2] = 'S';
+    image[3] = 0x1A;
+    image[4] = 1;
+    image[5] = 1;
+    std::fill(image.begin() + 16, image.begin() + 16 + 16 * 1024, 0xEA);
+    image[16U + 0x3FFAU] = 0x00;
+    image[16U + 0x3FFBU] = 0x90;
+    image[16U + 0x3FFCU] = 0x00;
+    image[16U + 0x3FFDU] = 0x80;
+    return nes::Cartridge::from_ines(image);
+}
+
+void system_bus_delivers_ppu_nmi_to_the_cpu() {
+    nes::Bus bus;
+    bus.insert_cartridge(nmi_cartridge());
+    bus.reset();
+    bus.cpu_write(0x2000, 0x80);
+    clock_until(bus.ppu(), 241, 1);
+    bus.clock();
+    expect(bus.cpu().state().program_counter == 0x9000,
+           "system bus delivers the PPU NMI vector to the CPU");
+    expect(bus.cpu().state().stack_pointer == 0xFA,
+           "CPU pushes its return state when the PPU raises NMI");
+}
+
 }  // namespace
 
 int run_ppu_timing_tests() {
@@ -72,5 +124,8 @@ int run_ppu_timing_tests() {
     ppu_steps_across_scanlines_and_frames();
     vertical_blank_tracks_the_timing_window();
     system_clock_runs_the_ppu_three_times_faster();
+    vertical_blank_raises_one_nmi_request();
+    enabling_nmi_during_vertical_blank_requests_it_immediately();
+    system_bus_delivers_ppu_nmi_to_the_cpu();
     return nes::test::failures - before;
 }

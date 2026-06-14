@@ -35,6 +35,7 @@ public:
         std::uint16_t pattern_shift_high = 0;
         std::uint16_t attribute_shift_low = 0;
         std::uint16_t attribute_shift_high = 0;
+        bool nmi_pending = false;
     };
 
     void connect_cartridge(std::shared_ptr<Cartridge> cartridge);
@@ -52,6 +53,7 @@ public:
     [[nodiscard]] const Framebuffer& framebuffer() const noexcept;
     [[nodiscard]] std::uint8_t pixel(std::size_t x, std::size_t y) const;
     void clear_frame_complete() noexcept;
+    [[nodiscard]] bool poll_nmi() noexcept;
 
 private:
     [[nodiscard]] std::size_t nametable_index(std::uint16_t address) const;
@@ -84,6 +86,7 @@ private:
     std::int16_t scanline_ = -1;
     std::int16_t cycle_ = 0;
     bool frame_complete_ = false;
+    bool nmi_pending_ = false;
 
     std::uint8_t next_tile_id_ = 0;
     std::uint8_t next_tile_attribute_ = 0;

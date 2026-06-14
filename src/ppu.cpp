@@ -10,6 +10,7 @@ namespace {
 
 constexpr std::uint8_t control_increment_mode = 0x04;
 constexpr std::uint8_t control_background_pattern = 0x10;
+constexpr std::uint8_t control_enable_nmi = 0x80;
 constexpr std::uint8_t mask_grayscale = 0x01;
 constexpr std::uint8_t mask_render_background_left = 0x02;
 constexpr std::uint8_t mask_render_background = 0x08;
@@ -73,6 +74,10 @@ void Ppu::cpu_write(std::uint16_t address, std::uint8_t value) {
     open_bus_ = value;
     switch (address & 0x0007U) {
     case 0:
+        if ((control_ & control_enable_nmi) == 0U && (value & control_enable_nmi) != 0U &&
+            (status_ & status_vertical_blank) != 0U) {
+            nmi_pending_ = true;
+        }
         control_ = value;
         temporary_address_ = static_cast<std::uint16_t>(
             (temporary_address_ & 0xF3FFU) | (static_cast<std::uint16_t>(value & 0x03U) << 10U));
@@ -160,6 +165,9 @@ void Ppu::clock() {
     }
     if (scanline_ == 241 && cycle_ == 1) {
         status_ = static_cast<std::uint8_t>(status_ | status_vertical_blank);
+        if ((control_ & control_enable_nmi) != 0U) {
+            nmi_pending_ = true;
+        }
     }
 
     if (scanline_ >= -1 && scanline_ < 240 && rendering_enabled()) {
@@ -212,6 +220,7 @@ void Ppu::reset() {
     scanline_ = -1;
     cycle_ = 0;
     frame_complete_ = false;
+    nmi_pending_ = false;
     next_tile_id_ = 0;
     next_tile_attribute_ = 0;
     next_tile_low_ = 0;
@@ -228,11 +237,17 @@ Ppu::State Ppu::state() const noexcept {
             temporary_address_, fine_x_,     write_latch_,    data_buffer_,
             scanline_,         cycle_,      frame_complete_, next_tile_id_,
             next_tile_attribute_, next_tile_low_, next_tile_high_, pattern_shift_low_,
-            pattern_shift_high_, attribute_shift_low_, attribute_shift_high_};
+            pattern_shift_high_, attribute_shift_low_, attribute_shift_high_, nmi_pending_};
 }
 
 void Ppu::clear_frame_complete() noexcept {
     frame_complete_ = false;
+}
+
+bool Ppu::poll_nmi() noexcept {
+    const auto pending = nmi_pending_;
+    nmi_pending_ = false;
+    return pending;
 }
 
 const Ppu::Framebuffer& Ppu::framebuffer() const noexcept {
