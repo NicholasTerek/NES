@@ -13,6 +13,7 @@ class Ppu {
 public:
     static constexpr std::size_t screen_width = 256;
     static constexpr std::size_t screen_height = 240;
+    using Framebuffer = std::array<std::uint8_t, screen_width * screen_height>;
 
     struct State {
         std::uint8_t control = 0;
@@ -48,6 +49,8 @@ public:
     void clock();
     void reset();
     [[nodiscard]] State state() const noexcept;
+    [[nodiscard]] const Framebuffer& framebuffer() const noexcept;
+    [[nodiscard]] std::uint8_t pixel(std::size_t x, std::size_t y) const;
     void clear_frame_complete() noexcept;
 
 private:
@@ -61,10 +64,12 @@ private:
     void increment_scroll_y();
     void transfer_scroll_x();
     void transfer_scroll_y();
+    void render_background_pixel();
 
     std::array<std::uint8_t, 8U * 1024U> pattern_ram_{};
     std::array<std::uint8_t, 4U * 1024U> nametable_ram_{};
     std::array<std::uint8_t, 32> palette_ram_{};
+    Framebuffer framebuffer_{};
     std::shared_ptr<Cartridge> cartridge_;
 
     std::uint8_t control_ = 0;

@@ -133,6 +133,55 @@ void vertical_scroll_wraps_the_visible_nametable() {
     expect((address & 0x0800U) != 0U, "vertical wrap switches nametables");
 }
 
+void fill_background(nes::Ppu& ppu, std::uint8_t tile, std::uint8_t attribute) {
+    for (std::uint16_t address = 0x2000; address < 0x23C0; ++address) {
+        ppu.ppu_write(address, tile);
+    }
+    for (std::uint16_t address = 0x23C0; address < 0x2400; ++address) {
+        ppu.ppu_write(address, attribute);
+    }
+}
+
+void clock_to_first_visible_pixels(nes::Ppu& ppu, int pixels) {
+    clock_until(ppu, 0, static_cast<std::int16_t>(pixels + 1));
+}
+
+void background_pixels_are_composed_into_the_framebuffer() {
+    nes::Ppu ppu;
+    ppu.connect_cartridge(background_cartridge());
+    fill_background(ppu, 1, 0xAA);
+    for (std::uint16_t row = 0; row < 8; ++row) {
+        ppu.ppu_write(static_cast<std::uint16_t>(0x0010U + row), 0xFF);
+        ppu.ppu_write(static_cast<std::uint16_t>(0x0018U + row), 0x00);
+    }
+    ppu.ppu_write(0x3F00, 0x0F);
+    ppu.ppu_write(0x3F09, 0x21);
+    ppu.cpu_write(0x2001, 0x0A);
+    clock_to_first_visible_pixels(ppu, 8);
+
+    expect(ppu.pixel(0, 0) == 0x21, "background shifters render the first visible pixel");
+    expect(ppu.pixel(7, 0) == 0x21, "background shifters render a complete tile row");
+    expect(ppu.framebuffer().size() == nes::Ppu::screen_width * nes::Ppu::screen_height,
+           "PPU exposes a complete 256 by 240 framebuffer");
+}
+
+void background_left_edge_can_be_clipped() {
+    nes::Ppu ppu;
+    ppu.connect_cartridge(background_cartridge());
+    fill_background(ppu, 1, 0x00);
+    for (std::uint16_t row = 0; row < 8; ++row) {
+        ppu.ppu_write(static_cast<std::uint16_t>(0x0010U + row), 0xFF);
+    }
+    ppu.ppu_write(0x3F00, 0x0F);
+    ppu.ppu_write(0x3F01, 0x16);
+    ppu.cpu_write(0x2001, 0x08);
+    clock_to_first_visible_pixels(ppu, 9);
+
+    expect(ppu.pixel(0, 0) == 0x0F, "disabled left-column rendering uses the backdrop colour");
+    expect(ppu.pixel(7, 0) == 0x0F, "background clipping covers the first eight pixels");
+    expect(ppu.pixel(8, 0) == 0x16, "background rendering resumes after the clipped column");
+}
+
 }  // namespace
 
 int run_ppu_background_tests() {
@@ -143,5 +192,7 @@ int run_ppu_background_tests() {
     horizontal_scroll_crosses_nametable_boundaries();
     pre_render_cycles_copy_the_scroll_address();
     vertical_scroll_wraps_the_visible_nametable();
+    background_pixels_are_composed_into_the_framebuffer();
+    background_left_edge_can_be_clipped();
     return nes::test::failures - before;
 }

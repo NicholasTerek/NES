@@ -11,6 +11,7 @@ namespace {
 constexpr std::uint8_t control_increment_mode = 0x04;
 constexpr std::uint8_t control_background_pattern = 0x10;
 constexpr std::uint8_t mask_grayscale = 0x01;
+constexpr std::uint8_t mask_render_background_left = 0x02;
 constexpr std::uint8_t mask_render_background = 0x08;
 constexpr std::uint8_t mask_render_sprites = 0x10;
 constexpr std::uint8_t status_vertical_blank = 0x80;
@@ -182,6 +183,11 @@ void Ppu::clock() {
         }
     }
 
+    if (scanline_ >= 0 && scanline_ < static_cast<std::int16_t>(Ppu::screen_height) &&
+        cycle_ >= 1 && cycle_ <= static_cast<std::int16_t>(Ppu::screen_width)) {
+        render_background_pixel();
+    }
+
     ++cycle_;
     if (cycle_ >= 341) {
         cycle_ = 0;
@@ -214,6 +220,7 @@ void Ppu::reset() {
     pattern_shift_high_ = 0;
     attribute_shift_low_ = 0;
     attribute_shift_high_ = 0;
+    framebuffer_.fill(0);
 }
 
 Ppu::State Ppu::state() const noexcept {
@@ -226,6 +233,14 @@ Ppu::State Ppu::state() const noexcept {
 
 void Ppu::clear_frame_complete() noexcept {
     frame_complete_ = false;
+}
+
+const Ppu::Framebuffer& Ppu::framebuffer() const noexcept {
+    return framebuffer_;
+}
+
+std::uint8_t Ppu::pixel(std::size_t x, std::size_t y) const {
+    return framebuffer_.at(y * screen_width + x);
 }
 
 bool Ppu::rendering_enabled() const noexcept {
@@ -352,6 +367,31 @@ void Ppu::transfer_scroll_y() {
         vram_address_ = static_cast<std::uint16_t>(
             (vram_address_ & ~0x7BE0U) | (temporary_address_ & 0x7BE0U));
     }
+}
+
+void Ppu::render_background_pixel() {
+    std::uint8_t background_pixel = 0;
+    std::uint8_t background_palette = 0;
+    const auto left_edge_visible = cycle_ > 8 || (mask_ & mask_render_background_left) != 0U;
+    if ((mask_ & mask_render_background) != 0U && left_edge_visible) {
+        const auto bit = static_cast<std::uint16_t>(0x8000U >> fine_x_);
+        const auto low_pixel = static_cast<std::uint8_t>((pattern_shift_low_ & bit) != 0U);
+        const auto high_pixel = static_cast<std::uint8_t>((pattern_shift_high_ & bit) != 0U);
+        background_pixel = static_cast<std::uint8_t>((high_pixel << 1U) | low_pixel);
+
+        const auto low_palette = static_cast<std::uint8_t>((attribute_shift_low_ & bit) != 0U);
+        const auto high_palette = static_cast<std::uint8_t>((attribute_shift_high_ & bit) != 0U);
+        background_palette = static_cast<std::uint8_t>((high_palette << 1U) | low_palette);
+    }
+    if (background_pixel == 0U) {
+        background_palette = 0;
+    }
+
+    const auto palette_address = static_cast<std::uint16_t>(
+        0x3F00U + static_cast<std::uint16_t>(background_palette) * 4U + background_pixel);
+    const auto index = static_cast<std::size_t>(scanline_) * screen_width +
+                       static_cast<std::size_t>(cycle_ - 1);
+    framebuffer_[index] = ppu_read(palette_address);
 }
 
 std::size_t Ppu::nametable_index(std::uint16_t address) const {
