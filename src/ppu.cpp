@@ -36,6 +36,8 @@ std::uint8_t Ppu::cpu_read(std::uint16_t address, bool read_only) {
             return mask_;
         case 2:
             return status_;
+        case 4:
+            return oam_[oam_address_];
         default:
             return open_bus_;
         }
@@ -47,6 +49,9 @@ std::uint8_t Ppu::cpu_read(std::uint16_t address, bool read_only) {
         value = static_cast<std::uint8_t>((status_ & 0xE0U) | (open_bus_ & 0x1FU));
         status_ = static_cast<std::uint8_t>(status_ & ~status_vertical_blank);
         write_latch_ = false;
+        break;
+    case 4:
+        value = oam_[oam_address_];
         break;
     case 7: {
         const auto address_before_increment = vram_address_;
@@ -84,6 +89,13 @@ void Ppu::cpu_write(std::uint16_t address, std::uint8_t value) {
         break;
     case 1:
         mask_ = value;
+        break;
+    case 3:
+        oam_address_ = value;
+        break;
+    case 4:
+        oam_[oam_address_] = value;
+        ++oam_address_;
         break;
     case 5:
         if (!write_latch_) {
@@ -224,6 +236,7 @@ void Ppu::reset() {
     write_latch_ = false;
     data_buffer_ = 0;
     open_bus_ = 0;
+    oam_address_ = 0;
     scanline_ = -1;
     cycle_ = 0;
     frame_complete_ = false;
@@ -245,7 +258,8 @@ Ppu::State Ppu::state() const noexcept {
             temporary_address_, fine_x_,     write_latch_,    data_buffer_,
             scanline_,         cycle_,      frame_complete_, odd_frame_, next_tile_id_,
             next_tile_attribute_, next_tile_low_, next_tile_high_, pattern_shift_low_,
-            pattern_shift_high_, attribute_shift_low_, attribute_shift_high_, nmi_pending_};
+            pattern_shift_high_, attribute_shift_low_, attribute_shift_high_, nmi_pending_,
+            oam_address_};
 }
 
 void Ppu::clear_frame_complete() noexcept {
@@ -256,6 +270,18 @@ bool Ppu::poll_nmi() noexcept {
     const auto pending = nmi_pending_;
     nmi_pending_ = false;
     return pending;
+}
+
+std::uint8_t Ppu::oam_read(std::uint8_t address) const noexcept {
+    return oam_[address];
+}
+
+void Ppu::oam_write(std::uint8_t address, std::uint8_t value) noexcept {
+    oam_[address] = value;
+}
+
+const std::array<std::uint8_t, 256>& Ppu::oam() const noexcept {
+    return oam_;
 }
 
 const Ppu::Framebuffer& Ppu::framebuffer() const noexcept {

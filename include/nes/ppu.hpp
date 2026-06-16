@@ -37,6 +37,7 @@ public:
         std::uint16_t attribute_shift_low = 0;
         std::uint16_t attribute_shift_high = 0;
         bool nmi_pending = false;
+        std::uint8_t oam_address = 0;
     };
 
     void connect_cartridge(std::shared_ptr<Cartridge> cartridge);
@@ -55,6 +56,9 @@ public:
     [[nodiscard]] std::uint8_t pixel(std::size_t x, std::size_t y) const;
     void clear_frame_complete() noexcept;
     [[nodiscard]] bool poll_nmi() noexcept;
+    [[nodiscard]] std::uint8_t oam_read(std::uint8_t address) const noexcept;
+    void oam_write(std::uint8_t address, std::uint8_t value) noexcept;
+    [[nodiscard]] const std::array<std::uint8_t, 256>& oam() const noexcept;
 
 private:
     [[nodiscard]] std::size_t nametable_index(std::uint16_t address) const;
@@ -73,6 +77,7 @@ private:
     std::array<std::uint8_t, 4U * 1024U> nametable_ram_{};
     std::array<std::uint8_t, 32> palette_ram_{};
     Framebuffer framebuffer_{};
+    std::array<std::uint8_t, 256> oam_{};
     std::shared_ptr<Cartridge> cartridge_;
 
     std::uint8_t control_ = 0;
@@ -84,6 +89,7 @@ private:
     bool write_latch_ = false;
     std::uint8_t data_buffer_ = 0;
     std::uint8_t open_bus_ = 0;
+    std::uint8_t oam_address_ = 0;
     std::int16_t scanline_ = -1;
     std::int16_t cycle_ = 0;
     bool frame_complete_ = false;
