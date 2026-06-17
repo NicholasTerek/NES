@@ -15,6 +15,14 @@ public:
     static constexpr std::size_t screen_height = 240;
     using Framebuffer = std::array<std::uint8_t, screen_width * screen_height>;
 
+    struct Sprite {
+        std::uint8_t y = 0xFF;
+        std::uint8_t tile = 0xFF;
+        std::uint8_t attributes = 0xFF;
+        std::uint8_t x = 0xFF;
+        std::uint8_t oam_index = 0xFF;
+    };
+
     struct State {
         std::uint8_t control = 0;
         std::uint8_t mask = 0;
@@ -38,6 +46,8 @@ public:
         std::uint16_t attribute_shift_high = 0;
         bool nmi_pending = false;
         std::uint8_t oam_address = 0;
+        std::uint8_t sprite_count = 0;
+        bool sprite_zero_possible = false;
     };
 
     void connect_cartridge(std::shared_ptr<Cartridge> cartridge);
@@ -59,6 +69,7 @@ public:
     [[nodiscard]] std::uint8_t oam_read(std::uint8_t address) const noexcept;
     void oam_write(std::uint8_t address, std::uint8_t value) noexcept;
     [[nodiscard]] const std::array<std::uint8_t, 256>& oam() const noexcept;
+    [[nodiscard]] const std::array<Sprite, 8>& active_sprites() const noexcept;
 
 private:
     [[nodiscard]] std::size_t nametable_index(std::uint16_t address) const;
@@ -72,12 +83,14 @@ private:
     void transfer_scroll_x();
     void transfer_scroll_y();
     void render_background_pixel();
+    void evaluate_sprites();
 
     std::array<std::uint8_t, 8U * 1024U> pattern_ram_{};
     std::array<std::uint8_t, 4U * 1024U> nametable_ram_{};
     std::array<std::uint8_t, 32> palette_ram_{};
     Framebuffer framebuffer_{};
     std::array<std::uint8_t, 256> oam_{};
+    std::array<Sprite, 8> active_sprites_{};
     std::shared_ptr<Cartridge> cartridge_;
 
     std::uint8_t control_ = 0;
@@ -104,6 +117,8 @@ private:
     std::uint16_t pattern_shift_high_ = 0;
     std::uint16_t attribute_shift_low_ = 0;
     std::uint16_t attribute_shift_high_ = 0;
+    std::uint8_t sprite_count_ = 0;
+    bool sprite_zero_possible_ = false;
 };
 
 }  // namespace nes

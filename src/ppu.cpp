@@ -16,6 +16,8 @@ constexpr std::uint8_t mask_render_background_left = 0x02;
 constexpr std::uint8_t mask_render_background = 0x08;
 constexpr std::uint8_t mask_render_sprites = 0x10;
 constexpr std::uint8_t status_vertical_blank = 0x80;
+constexpr std::uint8_t status_sprite_overflow = 0x20;
+constexpr std::uint8_t status_sprite_zero_hit = 0x40;
 
 }  // namespace
 
@@ -173,7 +175,8 @@ void Ppu::ppu_write(std::uint16_t address, std::uint8_t value) {
 
 void Ppu::clock() {
     if (scanline_ == -1 && cycle_ == 1) {
-        status_ = static_cast<std::uint8_t>(status_ & ~status_vertical_blank);
+        status_ = static_cast<std::uint8_t>(
+            status_ & ~(status_vertical_blank | status_sprite_overflow | status_sprite_zero_hit));
     }
     if (scanline_ == 241 && cycle_ == 1) {
         status_ = static_cast<std::uint8_t>(status_ | status_vertical_blank);
@@ -200,6 +203,9 @@ void Ppu::clock() {
         }
         if (scanline_ == -1 && cycle_ >= 280 && cycle_ < 305) {
             transfer_scroll_y();
+        }
+        if (cycle_ == 257) {
+            evaluate_sprites();
         }
     }
 
@@ -250,6 +256,9 @@ void Ppu::reset() {
     pattern_shift_high_ = 0;
     attribute_shift_low_ = 0;
     attribute_shift_high_ = 0;
+    active_sprites_.fill({});
+    sprite_count_ = 0;
+    sprite_zero_possible_ = false;
     framebuffer_.fill(0);
 }
 
@@ -259,7 +268,7 @@ Ppu::State Ppu::state() const noexcept {
             scanline_,         cycle_,      frame_complete_, odd_frame_, next_tile_id_,
             next_tile_attribute_, next_tile_low_, next_tile_high_, pattern_shift_low_,
             pattern_shift_high_, attribute_shift_low_, attribute_shift_high_, nmi_pending_,
-            oam_address_};
+            oam_address_, sprite_count_, sprite_zero_possible_};
 }
 
 void Ppu::clear_frame_complete() noexcept {
@@ -282,6 +291,10 @@ void Ppu::oam_write(std::uint8_t address, std::uint8_t value) noexcept {
 
 const std::array<std::uint8_t, 256>& Ppu::oam() const noexcept {
     return oam_;
+}
+
+const std::array<Ppu::Sprite, 8>& Ppu::active_sprites() const noexcept {
+    return active_sprites_;
 }
 
 const Ppu::Framebuffer& Ppu::framebuffer() const noexcept {
@@ -441,6 +454,42 @@ void Ppu::render_background_pixel() {
     const auto index = static_cast<std::size_t>(scanline_) * screen_width +
                        static_cast<std::size_t>(cycle_ - 1);
     framebuffer_[index] = ppu_read(palette_address);
+}
+
+void Ppu::evaluate_sprites() {
+    active_sprites_.fill({});
+    sprite_count_ = 0;
+    sprite_zero_possible_ = false;
+    status_ = static_cast<std::uint8_t>(status_ & ~status_sprite_overflow);
+
+    const auto target_scanline = static_cast<std::int16_t>(scanline_ + 1);
+    if (target_scanline < 0 || target_scanline >= static_cast<std::int16_t>(screen_height)) {
+        return;
+    }
+    const auto sprite_height = static_cast<std::int16_t>((control_ & 0x20U) != 0U ? 16 : 8);
+    std::uint8_t visible_count = 0;
+    for (std::uint8_t index = 0; index < 64U; ++index) {
+        const auto offset = static_cast<std::size_t>(index) * 4U;
+        const auto top = static_cast<std::uint8_t>(oam_[offset] + 1U);
+        const auto row = static_cast<std::int16_t>(
+            target_scanline - static_cast<std::int16_t>(top));
+        if (row < 0 || row >= sprite_height) {
+            continue;
+        }
+
+        if (visible_count < 8U) {
+            active_sprites_[visible_count] = {
+                oam_[offset], oam_[offset + 1U], oam_[offset + 2U], oam_[offset + 3U], index};
+            if (index == 0U) {
+                sprite_zero_possible_ = true;
+            }
+        }
+        ++visible_count;
+    }
+    sprite_count_ = static_cast<std::uint8_t>(visible_count > 8U ? 8U : visible_count);
+    if (visible_count > 8U) {
+        status_ = static_cast<std::uint8_t>(status_ | status_sprite_overflow);
+    }
 }
 
 std::size_t Ppu::nametable_index(std::uint16_t address) const {
