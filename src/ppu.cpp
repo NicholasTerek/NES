@@ -206,6 +206,7 @@ void Ppu::clock() {
         }
         if (cycle_ == 257) {
             evaluate_sprites();
+            fetch_sprite_patterns(static_cast<std::int16_t>(scanline_ + 1));
         }
     }
 
@@ -257,6 +258,8 @@ void Ppu::reset() {
     attribute_shift_low_ = 0;
     attribute_shift_high_ = 0;
     active_sprites_.fill({});
+    sprite_pattern_low_.fill(0);
+    sprite_pattern_high_.fill(0);
     sprite_count_ = 0;
     sprite_zero_possible_ = false;
     framebuffer_.fill(0);
@@ -295,6 +298,14 @@ const std::array<std::uint8_t, 256>& Ppu::oam() const noexcept {
 
 const std::array<Ppu::Sprite, 8>& Ppu::active_sprites() const noexcept {
     return active_sprites_;
+}
+
+const std::array<std::uint8_t, 8>& Ppu::sprite_pattern_low() const noexcept {
+    return sprite_pattern_low_;
+}
+
+const std::array<std::uint8_t, 8>& Ppu::sprite_pattern_high() const noexcept {
+    return sprite_pattern_high_;
 }
 
 const Ppu::Framebuffer& Ppu::framebuffer() const noexcept {
@@ -490,6 +501,60 @@ void Ppu::evaluate_sprites() {
     if (visible_count > 8U) {
         status_ = static_cast<std::uint8_t>(status_ | status_sprite_overflow);
     }
+}
+
+void Ppu::fetch_sprite_patterns(std::int16_t target_scanline) {
+    sprite_pattern_low_.fill(0);
+    sprite_pattern_high_.fill(0);
+
+    const auto sprite_16 = (control_ & 0x20U) != 0U;
+    for (std::uint8_t index = 0; index < sprite_count_; ++index) {
+        const auto& sprite = active_sprites_[index];
+        const auto top = static_cast<std::uint8_t>(sprite.y + 1U);
+        auto row = static_cast<std::int16_t>(
+            target_scanline - static_cast<std::int16_t>(top));
+        const auto height = static_cast<std::int16_t>(sprite_16 ? 16 : 8);
+        if (row < 0 || row >= height) {
+            continue;
+        }
+        if ((sprite.attributes & 0x80U) != 0U) {
+            row = static_cast<std::int16_t>(height - 1 - row);
+        }
+
+        std::uint16_t pattern_address = 0;
+        if (!sprite_16) {
+            const auto table = static_cast<std::uint16_t>(
+                (control_ & 0x08U) != 0U ? 0x1000U : 0x0000U);
+            pattern_address = static_cast<std::uint16_t>(
+                table + static_cast<std::uint16_t>(sprite.tile) * 16U +
+                static_cast<std::uint16_t>(row));
+        } else {
+            const auto table = static_cast<std::uint16_t>((sprite.tile & 0x01U) << 12U);
+            auto tile = static_cast<std::uint8_t>(sprite.tile & 0xFEU);
+            if (row >= 8) {
+                ++tile;
+                row = static_cast<std::int16_t>(row - 8);
+            }
+            pattern_address = static_cast<std::uint16_t>(
+                table + static_cast<std::uint16_t>(tile) * 16U +
+                static_cast<std::uint16_t>(row));
+        }
+
+        auto low = ppu_read(pattern_address);
+        auto high = ppu_read(static_cast<std::uint16_t>(pattern_address + 8U));
+        if ((sprite.attributes & 0x40U) != 0U) {
+            low = reverse_bits(low);
+            high = reverse_bits(high);
+        }
+        sprite_pattern_low_[index] = low;
+        sprite_pattern_high_[index] = high;
+    }
+}
+
+std::uint8_t Ppu::reverse_bits(std::uint8_t value) noexcept {
+    value = static_cast<std::uint8_t>((value >> 4U) | (value << 4U));
+    value = static_cast<std::uint8_t>(((value & 0xCCU) >> 2U) | ((value & 0x33U) << 2U));
+    return static_cast<std::uint8_t>(((value & 0xAAU) >> 1U) | ((value & 0x55U) << 1U));
 }
 
 std::size_t Ppu::nametable_index(std::uint16_t address) const {

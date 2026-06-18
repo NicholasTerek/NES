@@ -96,6 +96,51 @@ void ninth_visible_sprite_sets_overflow() {
     expect((ppu.state().status & 0x20U) != 0U, "ninth visible sprite sets overflow");
 }
 
+void sprite_patterns_honor_table_and_flip_controls() {
+    nes::Ppu ppu;
+    hide_all_sprites(ppu);
+    ppu.oam_write(0, 0xFF);
+    ppu.oam_write(1, 2);
+    ppu.oam_write(2, 0x40);
+    ppu.ppu_write(0x1020, 0x80);
+    ppu.ppu_write(0x1028, 0x40);
+    ppu.cpu_write(0x2000, 0x08);
+    ppu.cpu_write(0x2001, 0x10);
+    clock_until(ppu, -1, 258);
+
+    expect(ppu.sprite_pattern_low()[0] == 0x01,
+           "horizontal flip reverses the sprite low pattern plane");
+    expect(ppu.sprite_pattern_high()[0] == 0x02,
+           "horizontal flip reverses the sprite high pattern plane");
+}
+
+void vertical_flip_selects_the_opposite_sprite_row() {
+    nes::Ppu ppu;
+    hide_all_sprites(ppu);
+    ppu.oam_write(0, 0xFF);
+    ppu.oam_write(1, 1);
+    ppu.oam_write(2, 0x80);
+    ppu.ppu_write(0x0010, 0x11);
+    ppu.ppu_write(0x0017, 0x77);
+    ppu.cpu_write(0x2001, 0x10);
+    clock_until(ppu, -1, 258);
+    expect(ppu.sprite_pattern_low()[0] == 0x77,
+           "vertical flip fetches the opposite row of an 8 by 8 sprite");
+}
+
+void sixteen_pixel_sprites_select_the_table_from_the_tile_id() {
+    nes::Ppu ppu;
+    hide_all_sprites(ppu);
+    ppu.oam_write(0, 0xFF);
+    ppu.oam_write(1, 3);
+    ppu.ppu_write(0x1020, 0x5A);
+    ppu.cpu_write(0x2000, 0x20);
+    ppu.cpu_write(0x2001, 0x10);
+    clock_until(ppu, -1, 258);
+    expect(ppu.sprite_pattern_low()[0] == 0x5A,
+           "8 by 16 sprites select their pattern table from tile bit zero");
+}
+
 }  // namespace
 
 int run_ppu_sprite_tests() {
@@ -106,5 +151,8 @@ int run_ppu_sprite_tests() {
     reset_preserves_object_memory_but_resets_its_address();
     visible_sprites_are_selected_in_oam_order();
     ninth_visible_sprite_sets_overflow();
+    sprite_patterns_honor_table_and_flip_controls();
+    vertical_flip_selects_the_opposite_sprite_row();
+    sixteen_pixel_sprites_select_the_table_from_the_tile_id();
     return nes::test::failures - before;
 }
