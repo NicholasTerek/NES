@@ -13,6 +13,7 @@ constexpr std::uint8_t control_background_pattern = 0x10;
 constexpr std::uint8_t control_enable_nmi = 0x80;
 constexpr std::uint8_t mask_grayscale = 0x01;
 constexpr std::uint8_t mask_render_background_left = 0x02;
+constexpr std::uint8_t mask_render_sprites_left = 0x04;
 constexpr std::uint8_t mask_render_background = 0x08;
 constexpr std::uint8_t mask_render_sprites = 0x10;
 constexpr std::uint8_t status_vertical_blank = 0x80;
@@ -188,6 +189,9 @@ void Ppu::clock() {
     if (scanline_ >= -1 && scanline_ < 240 && rendering_enabled()) {
         if ((cycle_ >= 2 && cycle_ < 258) || (cycle_ >= 321 && cycle_ < 338)) {
             update_background_shifters();
+            if (cycle_ < 258) {
+                update_sprite_shifters();
+            }
             fetch_background_data();
         }
         if (cycle_ == 257) {
@@ -212,7 +216,7 @@ void Ppu::clock() {
 
     if (scanline_ >= 0 && scanline_ < static_cast<std::int16_t>(Ppu::screen_height) &&
         cycle_ >= 1 && cycle_ <= static_cast<std::int16_t>(Ppu::screen_width)) {
-        render_background_pixel();
+        render_pixel();
     }
 
     if (scanline_ == -1 && cycle_ == 339 && odd_frame_ && rendering_enabled()) {
@@ -260,6 +264,7 @@ void Ppu::reset() {
     active_sprites_.fill({});
     sprite_pattern_low_.fill(0);
     sprite_pattern_high_.fill(0);
+    sprite_x_counters_.fill(0);
     sprite_count_ = 0;
     sprite_zero_possible_ = false;
     framebuffer_.fill(0);
@@ -306,6 +311,10 @@ const std::array<std::uint8_t, 8>& Ppu::sprite_pattern_low() const noexcept {
 
 const std::array<std::uint8_t, 8>& Ppu::sprite_pattern_high() const noexcept {
     return sprite_pattern_high_;
+}
+
+const std::array<std::uint8_t, 8>& Ppu::sprite_x_counters() const noexcept {
+    return sprite_x_counters_;
 }
 
 const Ppu::Framebuffer& Ppu::framebuffer() const noexcept {
@@ -442,7 +451,7 @@ void Ppu::transfer_scroll_y() {
     }
 }
 
-void Ppu::render_background_pixel() {
+void Ppu::render_pixel() {
     std::uint8_t background_pixel = 0;
     std::uint8_t background_palette = 0;
     const auto left_edge_visible = cycle_ > 8 || (mask_ & mask_render_background_left) != 0U;
@@ -456,12 +465,35 @@ void Ppu::render_background_pixel() {
         const auto high_palette = static_cast<std::uint8_t>((attribute_shift_high_ & bit) != 0U);
         background_palette = static_cast<std::uint8_t>((high_palette << 1U) | low_palette);
     }
-    if (background_pixel == 0U) {
-        background_palette = 0;
+    std::uint8_t sprite_pixel = 0;
+    std::uint8_t sprite_palette = 0;
+    const auto sprite_left_edge_visible =
+        cycle_ > 8 || (mask_ & mask_render_sprites_left) != 0U;
+    if ((mask_ & mask_render_sprites) != 0U && sprite_left_edge_visible) {
+        for (std::uint8_t index = 0; index < sprite_count_; ++index) {
+            if (sprite_x_counters_[index] != 0U) {
+                continue;
+            }
+            const auto low = static_cast<std::uint8_t>((sprite_pattern_low_[index] & 0x80U) != 0U);
+            const auto high = static_cast<std::uint8_t>((sprite_pattern_high_[index] & 0x80U) != 0U);
+            const auto candidate = static_cast<std::uint8_t>((high << 1U) | low);
+            if (candidate != 0U) {
+                sprite_pixel = candidate;
+                sprite_palette = static_cast<std::uint8_t>(
+                    4U + (active_sprites_[index].attributes & 0x03U));
+                break;
+            }
+        }
     }
 
+    auto final_pixel = background_pixel;
+    auto final_palette = background_pixel == 0U ? std::uint8_t{0} : background_palette;
+    if (sprite_pixel != 0U) {
+        final_pixel = sprite_pixel;
+        final_palette = sprite_palette;
+    }
     const auto palette_address = static_cast<std::uint16_t>(
-        0x3F00U + static_cast<std::uint16_t>(background_palette) * 4U + background_pixel);
+        0x3F00U + static_cast<std::uint16_t>(final_palette) * 4U + final_pixel);
     const auto index = static_cast<std::size_t>(scanline_) * screen_width +
                        static_cast<std::size_t>(cycle_ - 1);
     framebuffer_[index] = ppu_read(palette_address);
@@ -506,6 +538,7 @@ void Ppu::evaluate_sprites() {
 void Ppu::fetch_sprite_patterns(std::int16_t target_scanline) {
     sprite_pattern_low_.fill(0);
     sprite_pattern_high_.fill(0);
+    sprite_x_counters_.fill(0);
 
     const auto sprite_16 = (control_ & 0x20U) != 0U;
     for (std::uint8_t index = 0; index < sprite_count_; ++index) {
@@ -548,6 +581,23 @@ void Ppu::fetch_sprite_patterns(std::int16_t target_scanline) {
         }
         sprite_pattern_low_[index] = low;
         sprite_pattern_high_[index] = high;
+        sprite_x_counters_[index] = sprite.x;
+    }
+}
+
+void Ppu::update_sprite_shifters() {
+    if ((mask_ & mask_render_sprites) == 0U) {
+        return;
+    }
+    for (std::uint8_t index = 0; index < sprite_count_; ++index) {
+        if (sprite_x_counters_[index] > 0U) {
+            --sprite_x_counters_[index];
+        } else {
+            sprite_pattern_low_[index] = static_cast<std::uint8_t>(
+                sprite_pattern_low_[index] << 1U);
+            sprite_pattern_high_[index] = static_cast<std::uint8_t>(
+                sprite_pattern_high_[index] << 1U);
+        }
     }
 }
 

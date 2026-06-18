@@ -141,6 +141,36 @@ void sixteen_pixel_sprites_select_the_table_from_the_tile_id() {
            "8 by 16 sprites select their pattern table from tile bit zero");
 }
 
+void sprite_pixels_render_from_object_memory() {
+    nes::Ppu ppu;
+    hide_all_sprites(ppu);
+    ppu.oam_write(0, 0xFF);
+    ppu.oam_write(1, 1);
+    ppu.oam_write(2, 0x00);
+    ppu.oam_write(3, 0);
+    ppu.ppu_write(0x0010, 0x80);
+    ppu.ppu_write(0x3F11, 0x26);
+    ppu.cpu_write(0x2001, 0x14);
+    clock_until(ppu, 0, 2);
+    expect(ppu.pixel(0, 0) == 0x26, "sprite pattern pixel reaches the framebuffer");
+}
+
+void sprite_x_counter_delays_pattern_shifting() {
+    nes::Ppu ppu;
+    hide_all_sprites(ppu);
+    ppu.oam_write(0, 0xFF);
+    ppu.oam_write(1, 1);
+    ppu.oam_write(3, 3);
+    ppu.ppu_write(0x0010, 0x80);
+    ppu.ppu_write(0x3F00, 0x0F);
+    ppu.ppu_write(0x3F11, 0x30);
+    ppu.cpu_write(0x2001, 0x14);
+    clock_until(ppu, 0, 5);
+
+    expect(ppu.pixel(2, 0) == 0x0F, "sprite remains transparent before its X coordinate");
+    expect(ppu.pixel(3, 0) == 0x30, "sprite begins rendering at its OAM X coordinate");
+}
+
 }  // namespace
 
 int run_ppu_sprite_tests() {
@@ -154,5 +184,7 @@ int run_ppu_sprite_tests() {
     sprite_patterns_honor_table_and_flip_controls();
     vertical_flip_selects_the_opposite_sprite_row();
     sixteen_pixel_sprites_select_the_table_from_the_tile_id();
+    sprite_pixels_render_from_object_memory();
+    sprite_x_counter_delays_pattern_shifting();
     return nes::test::failures - before;
 }

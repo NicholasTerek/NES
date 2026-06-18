@@ -72,6 +72,7 @@ public:
     [[nodiscard]] const std::array<Sprite, 8>& active_sprites() const noexcept;
     [[nodiscard]] const std::array<std::uint8_t, 8>& sprite_pattern_low() const noexcept;
     [[nodiscard]] const std::array<std::uint8_t, 8>& sprite_pattern_high() const noexcept;
+    [[nodiscard]] const std::array<std::uint8_t, 8>& sprite_x_counters() const noexcept;
 
 private:
     [[nodiscard]] std::size_t nametable_index(std::uint16_t address) const;
@@ -84,9 +85,10 @@ private:
     void increment_scroll_y();
     void transfer_scroll_x();
     void transfer_scroll_y();
-    void render_background_pixel();
+    void render_pixel();
     void evaluate_sprites();
     void fetch_sprite_patterns(std::int16_t target_scanline);
+    void update_sprite_shifters();
     [[nodiscard]] static std::uint8_t reverse_bits(std::uint8_t value) noexcept;
 
     std::array<std::uint8_t, 8U * 1024U> pattern_ram_{};
@@ -97,6 +99,7 @@ private:
     std::array<Sprite, 8> active_sprites_{};
     std::array<std::uint8_t, 8> sprite_pattern_low_{};
     std::array<std::uint8_t, 8> sprite_pattern_high_{};
+    std::array<std::uint8_t, 8> sprite_x_counters_{};
     std::shared_ptr<Cartridge> cartridge_;
 
     std::uint8_t control_ = 0;
