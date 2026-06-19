@@ -467,6 +467,7 @@ void Ppu::render_pixel() {
     }
     std::uint8_t sprite_pixel = 0;
     std::uint8_t sprite_palette = 0;
+    bool sprite_in_front = false;
     const auto sprite_left_edge_visible =
         cycle_ > 8 || (mask_ & mask_render_sprites_left) != 0U;
     if ((mask_ & mask_render_sprites) != 0U && sprite_left_edge_visible) {
@@ -481,6 +482,7 @@ void Ppu::render_pixel() {
                 sprite_pixel = candidate;
                 sprite_palette = static_cast<std::uint8_t>(
                     4U + (active_sprites_[index].attributes & 0x03U));
+                sprite_in_front = (active_sprites_[index].attributes & 0x20U) == 0U;
                 break;
             }
         }
@@ -488,7 +490,7 @@ void Ppu::render_pixel() {
 
     auto final_pixel = background_pixel;
     auto final_palette = background_pixel == 0U ? std::uint8_t{0} : background_palette;
-    if (sprite_pixel != 0U) {
+    if (sprite_pixel != 0U && (background_pixel == 0U || sprite_in_front)) {
         final_pixel = sprite_pixel;
         final_palette = sprite_palette;
     }

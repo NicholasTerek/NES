@@ -171,6 +171,47 @@ void sprite_x_counter_delays_pattern_shifting() {
     expect(ppu.pixel(3, 0) == 0x30, "sprite begins rendering at its OAM X coordinate");
 }
 
+void fill_background(nes::Ppu& ppu, std::uint8_t tile) {
+    for (std::uint16_t address = 0x2000; address < 0x23C0; ++address) {
+        ppu.ppu_write(address, tile);
+    }
+}
+
+nes::Ppu layered_pixel_ppu(std::uint8_t sprite_attributes,
+                           std::uint8_t sprite_pattern = 0x80) {
+    nes::Ppu ppu;
+    hide_all_sprites(ppu);
+    fill_background(ppu, 1);
+    ppu.oam_write(0, 0xFF);
+    ppu.oam_write(1, 2);
+    ppu.oam_write(2, sprite_attributes);
+    ppu.oam_write(3, 0);
+    for (std::uint16_t row = 0; row < 8; ++row) {
+        ppu.ppu_write(static_cast<std::uint16_t>(0x0010U + row), 0xFF);
+    }
+    ppu.ppu_write(0x0020, sprite_pattern);
+    ppu.ppu_write(0x3F01, 0x16);
+    ppu.ppu_write(0x3F11, 0x26);
+    ppu.cpu_write(0x2001, 0x1E);
+    return ppu;
+}
+
+void sprite_priority_selects_foreground_or_background() {
+    auto front = layered_pixel_ppu(0x00);
+    clock_until(front, 0, 2);
+    expect(front.pixel(0, 0) == 0x26, "front-priority sprite wins an opaque collision");
+
+    auto behind = layered_pixel_ppu(0x20);
+    clock_until(behind, 0, 2);
+    expect(behind.pixel(0, 0) == 0x16, "behind-priority sprite yields to opaque background");
+}
+
+void transparent_sprite_pixels_reveal_the_background() {
+    auto ppu = layered_pixel_ppu(0x00, 0x00);
+    clock_until(ppu, 0, 2);
+    expect(ppu.pixel(0, 0) == 0x16, "transparent sprite pixel leaves background visible");
+}
+
 }  // namespace
 
 int run_ppu_sprite_tests() {
@@ -186,5 +227,7 @@ int run_ppu_sprite_tests() {
     sixteen_pixel_sprites_select_the_table_from_the_tile_id();
     sprite_pixels_render_from_object_memory();
     sprite_x_counter_delays_pattern_shifting();
+    sprite_priority_selects_foreground_or_background();
+    transparent_sprite_pixels_reveal_the_background();
     return nes::test::failures - before;
 }
