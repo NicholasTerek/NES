@@ -125,6 +125,32 @@ void reset_clears_ppu_register_state() {
     expect(!bus.ppu().state().write_latch, "bus reset clears the PPU write latch");
 }
 
+void oam_dma_copies_a_cpu_memory_page() {
+    nes::Bus bus;
+    bus.reset();
+    for (std::uint16_t offset = 0; offset < 256; ++offset) {
+        bus.cpu_write(static_cast<std::uint16_t>(0x0200U + offset),
+                      static_cast<std::uint8_t>(offset ^ 0x5AU));
+    }
+    bus.cpu_write(0x2003, 0x10);
+    const auto cpu_cycles = bus.cpu().state().cycles;
+    const auto start_clock = bus.system_clock();
+    bus.cpu_write(0x4014, 0x02);
+    expect(bus.dma_active(), "$4014 write begins an OAM DMA transfer");
+
+    for (int clocks = 0; bus.dma_active() && clocks < 2'000; ++clocks) {
+        bus.clock();
+    }
+    expect(!bus.dma_active(), "OAM DMA completes after one memory page");
+    expect(bus.ppu().oam_read(0x10) == 0x5A, "DMA begins at the current OAM address");
+    expect(bus.ppu().oam_read(0x0F) == static_cast<std::uint8_t>(0xFFU ^ 0x5AU),
+           "DMA wraps across the end of object memory");
+    expect(bus.cpu().state().cycles == cpu_cycles, "OAM DMA stalls the CPU");
+    const auto elapsed = bus.system_clock() - start_clock;
+    expect(elapsed >= 513U * 3U && elapsed <= 514U * 3U,
+           "OAM DMA consumes 513 or 514 CPU cycles");
+}
+
 void empty_cartridges_are_rejected() {
     nes::Bus bus;
     bool rejected = false;
@@ -165,6 +191,7 @@ int run_bus_tests() {
     ppu_registers_repeat_through_the_cpu_window();
     cartridge_character_memory_is_connected_to_the_ppu();
     reset_clears_ppu_register_state();
+    oam_dma_copies_a_cpu_memory_page();
     empty_cartridges_are_rejected();
     reset_vector_flows_from_cartridge_to_cpu();
     unmapped_cpu_addresses_have_open_bus_defaults();

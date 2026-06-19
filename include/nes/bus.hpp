@@ -25,6 +25,7 @@ public:
     [[nodiscard]] Ppu& ppu() noexcept;
     [[nodiscard]] const Ppu& ppu() const noexcept;
     [[nodiscard]] std::uint64_t system_clock() const noexcept;
+    [[nodiscard]] bool dma_active() const noexcept;
     [[nodiscard]] std::shared_ptr<Cartridge> cartridge() const noexcept;
 
     std::uint8_t cpu_read(std::uint16_t address, bool read_only = false) override;
@@ -38,6 +39,11 @@ private:
     std::array<std::uint8_t, cpu_ram_size> cpu_ram_{};
     std::shared_ptr<Cartridge> cartridge_;
     std::uint64_t system_clock_counter_ = 0;
+    std::uint8_t dma_page_ = 0;
+    std::uint8_t dma_address_ = 0;
+    std::uint8_t dma_data_ = 0;
+    bool dma_dummy_ = true;
+    bool dma_transfer_ = false;
 };
 
 }  // namespace nes

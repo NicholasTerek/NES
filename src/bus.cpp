@@ -24,6 +24,11 @@ void Bus::reset() {
     ppu_.reset();
     cpu_.reset();
     system_clock_counter_ = 0;
+    dma_page_ = 0;
+    dma_address_ = 0;
+    dma_data_ = 0;
+    dma_dummy_ = true;
+    dma_transfer_ = false;
 }
 
 void Bus::clock() {
@@ -32,7 +37,26 @@ void Bus::clock() {
         cpu_.nmi();
     }
     if (system_clock_counter_ % 3U == 0U) {
-        cpu_.clock();
+        if (dma_transfer_) {
+            if (dma_dummy_) {
+                if (system_clock_counter_ % 2U == 1U) {
+                    dma_dummy_ = false;
+                }
+            } else if (system_clock_counter_ % 2U == 0U) {
+                const auto source = static_cast<std::uint16_t>(
+                    (static_cast<std::uint16_t>(dma_page_) << 8U) | dma_address_);
+                dma_data_ = cpu_read(source);
+            } else {
+                ppu_.cpu_write(0x0004, dma_data_);
+                ++dma_address_;
+                if (dma_address_ == 0U) {
+                    dma_transfer_ = false;
+                    dma_dummy_ = true;
+                }
+            }
+        } else {
+            cpu_.clock();
+        }
     }
     ++system_clock_counter_;
 }
@@ -55,6 +79,10 @@ const Ppu& Bus::ppu() const noexcept {
 
 std::uint64_t Bus::system_clock() const noexcept {
     return system_clock_counter_;
+}
+
+bool Bus::dma_active() const noexcept {
+    return dma_transfer_;
 }
 
 std::shared_ptr<Cartridge> Bus::cartridge() const noexcept {
@@ -87,6 +115,13 @@ void Bus::cpu_write(std::uint16_t address, std::uint8_t value) {
     }
     if (address <= 0x3FFFU) {
         ppu_.cpu_write(static_cast<std::uint16_t>(address & 0x0007U), value);
+        return;
+    }
+    if (address == 0x4014U) {
+        dma_page_ = value;
+        dma_address_ = 0;
+        dma_transfer_ = true;
+        dma_dummy_ = true;
     }
 }
 
