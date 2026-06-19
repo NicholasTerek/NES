@@ -212,6 +212,33 @@ void transparent_sprite_pixels_reveal_the_background() {
     expect(ppu.pixel(0, 0) == 0x16, "transparent sprite pixel leaves background visible");
 }
 
+void sprite_zero_collision_sets_the_status_flag() {
+    auto ppu = layered_pixel_ppu(0x20);
+    clock_until(ppu, 0, 2);
+    expect((ppu.state().status & 0x40U) != 0U,
+           "opaque sprite zero collision sets the hit flag regardless of priority");
+}
+
+void other_sprites_do_not_trigger_sprite_zero_hit() {
+    auto ppu = layered_pixel_ppu(0x00);
+    ppu.oam_write(4, ppu.oam_read(0));
+    ppu.oam_write(5, ppu.oam_read(1));
+    ppu.oam_write(6, ppu.oam_read(2));
+    ppu.oam_write(7, ppu.oam_read(3));
+    ppu.oam_write(0, 0x80);
+    clock_until(ppu, 0, 2);
+    expect((ppu.state().status & 0x40U) == 0U,
+           "opaque collision from a later sprite does not set sprite-zero hit");
+}
+
+void left_edge_clipping_suppresses_sprite_zero_hit() {
+    auto ppu = layered_pixel_ppu(0x00);
+    ppu.cpu_write(0x2001, 0x18);
+    clock_until(ppu, 0, 2);
+    expect((ppu.state().status & 0x40U) == 0U,
+           "clipped left-edge pixels do not trigger sprite-zero hit");
+}
+
 }  // namespace
 
 int run_ppu_sprite_tests() {
@@ -229,5 +256,8 @@ int run_ppu_sprite_tests() {
     sprite_x_counter_delays_pattern_shifting();
     sprite_priority_selects_foreground_or_background();
     transparent_sprite_pixels_reveal_the_background();
+    sprite_zero_collision_sets_the_status_flag();
+    other_sprites_do_not_trigger_sprite_zero_hit();
+    left_edge_clipping_suppresses_sprite_zero_hit();
     return nes::test::failures - before;
 }

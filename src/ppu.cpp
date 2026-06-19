@@ -468,6 +468,7 @@ void Ppu::render_pixel() {
     std::uint8_t sprite_pixel = 0;
     std::uint8_t sprite_palette = 0;
     bool sprite_in_front = false;
+    bool sprite_zero_rendering = false;
     const auto sprite_left_edge_visible =
         cycle_ > 8 || (mask_ & mask_render_sprites_left) != 0U;
     if ((mask_ & mask_render_sprites) != 0U && sprite_left_edge_visible) {
@@ -483,6 +484,7 @@ void Ppu::render_pixel() {
                 sprite_palette = static_cast<std::uint8_t>(
                     4U + (active_sprites_[index].attributes & 0x03U));
                 sprite_in_front = (active_sprites_[index].attributes & 0x20U) == 0U;
+                sprite_zero_rendering = active_sprites_[index].oam_index == 0U;
                 break;
             }
         }
@@ -493,6 +495,11 @@ void Ppu::render_pixel() {
     if (sprite_pixel != 0U && (background_pixel == 0U || sprite_in_front)) {
         final_pixel = sprite_pixel;
         final_palette = sprite_palette;
+    }
+    if (background_pixel != 0U && sprite_pixel != 0U && sprite_zero_possible_ &&
+        sprite_zero_rendering && (mask_ & mask_render_background) != 0U &&
+        (mask_ & mask_render_sprites) != 0U && cycle_ >= 1 && cycle_ < 256) {
+        status_ = static_cast<std::uint8_t>(status_ | status_sprite_zero_hit);
     }
     const auto palette_address = static_cast<std::uint16_t>(
         0x3F00U + static_cast<std::uint16_t>(final_palette) * 4U + final_pixel);
