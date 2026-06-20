@@ -29,6 +29,8 @@ void Bus::reset() {
     dma_data_ = 0;
     dma_dummy_ = true;
     dma_transfer_ = false;
+    controller_shift_.fill(0);
+    controller_strobe_ = false;
 }
 
 void Bus::clock() {
@@ -85,13 +87,28 @@ bool Bus::dma_active() const noexcept {
     return dma_transfer_;
 }
 
+void Bus::set_controller_state(std::size_t port, std::uint8_t buttons) {
+    if (port >= controller_state_.size()) {
+        throw std::out_of_range("controller port must be zero or one");
+    }
+    controller_state_[port] = buttons;
+    if (controller_strobe_) {
+        controller_shift_[port] = buttons;
+    }
+}
+
+std::uint8_t Bus::controller_state(std::size_t port) const {
+    if (port >= controller_state_.size()) {
+        throw std::out_of_range("controller port must be zero or one");
+    }
+    return controller_state_[port];
+}
+
 std::shared_ptr<Cartridge> Bus::cartridge() const noexcept {
     return cartridge_;
 }
 
 std::uint8_t Bus::cpu_read(std::uint16_t address, bool read_only) {
-    static_cast<void>(read_only);
-
     std::uint8_t value = 0;
     if (cartridge_ && cartridge_->cpu_read(address, value)) {
         return value;
@@ -101,6 +118,17 @@ std::uint8_t Bus::cpu_read(std::uint16_t address, bool read_only) {
     }
     if (address <= 0x3FFFU) {
         return ppu_.cpu_read(static_cast<std::uint16_t>(address & 0x0007U), read_only);
+    }
+    if (address == 0x4016U || address == 0x4017U) {
+        const auto port = static_cast<std::size_t>(address & 0x0001U);
+        const auto serial = controller_strobe_ ? controller_state_[port]
+                                               : controller_shift_[port];
+        const auto result = static_cast<std::uint8_t>(serial & 0x01U);
+        if (!read_only && !controller_strobe_) {
+            controller_shift_[port] =
+                static_cast<std::uint8_t>((controller_shift_[port] >> 1U) | 0x80U);
+        }
+        return result;
     }
     return 0;
 }
@@ -122,6 +150,14 @@ void Bus::cpu_write(std::uint16_t address, std::uint8_t value) {
         dma_address_ = 0;
         dma_transfer_ = true;
         dma_dummy_ = true;
+        return;
+    }
+    if (address == 0x4016U) {
+        const bool strobe = (value & 0x01U) != 0U;
+        if (strobe || controller_strobe_) {
+            controller_shift_ = controller_state_;
+        }
+        controller_strobe_ = strobe;
     }
 }
 

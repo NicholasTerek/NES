@@ -5,6 +5,7 @@
 #include "nes/ppu.hpp"
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 
@@ -26,6 +27,8 @@ public:
     [[nodiscard]] const Ppu& ppu() const noexcept;
     [[nodiscard]] std::uint64_t system_clock() const noexcept;
     [[nodiscard]] bool dma_active() const noexcept;
+    void set_controller_state(std::size_t port, std::uint8_t buttons);
+    [[nodiscard]] std::uint8_t controller_state(std::size_t port) const;
     [[nodiscard]] std::shared_ptr<Cartridge> cartridge() const noexcept;
 
     std::uint8_t cpu_read(std::uint16_t address, bool read_only = false) override;
@@ -44,6 +47,9 @@ private:
     std::uint8_t dma_data_ = 0;
     bool dma_dummy_ = true;
     bool dma_transfer_ = false;
+    std::array<std::uint8_t, 2> controller_state_{};
+    std::array<std::uint8_t, 2> controller_shift_{};
+    bool controller_strobe_ = false;
 };
 
 }  // namespace nes
