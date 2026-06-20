@@ -151,6 +151,34 @@ void oam_dma_copies_a_cpu_memory_page() {
            "OAM DMA consumes 513 or 514 CPU cycles");
 }
 
+std::uint16_t run_dma_and_count_cpu_slots(nes::Bus& bus) {
+    std::uint16_t cpu_slots = 0;
+    for (int clocks = 0; bus.dma_active() && clocks < 2'000; ++clocks) {
+        if (bus.system_clock() % 3U == 0U) {
+            ++cpu_slots;
+        }
+        bus.clock();
+    }
+    return cpu_slots;
+}
+
+void oam_dma_timing_depends_on_cpu_cycle_parity() {
+    nes::Bus even_phase;
+    even_phase.reset();
+    even_phase.cpu_write(0x4014, 0x00);
+    expect(run_dma_and_count_cpu_slots(even_phase) == 514,
+           "even-phase OAM DMA includes an alignment cycle");
+
+    nes::Bus odd_phase;
+    odd_phase.reset();
+    odd_phase.clock();
+    odd_phase.clock();
+    odd_phase.clock();
+    odd_phase.cpu_write(0x4014, 0x00);
+    expect(run_dma_and_count_cpu_slots(odd_phase) == 513,
+           "odd-phase OAM DMA completes in 513 CPU slots");
+}
+
 void controllers_latch_and_shift_both_ports() {
     nes::Bus bus;
     bus.set_controller_state(0, 0b1010'0101);
@@ -248,6 +276,7 @@ int run_bus_tests() {
     cartridge_character_memory_is_connected_to_the_ppu();
     reset_clears_ppu_register_state();
     oam_dma_copies_a_cpu_memory_page();
+    oam_dma_timing_depends_on_cpu_cycle_parity();
     controllers_latch_and_shift_both_ports();
     controller_strobe_reports_live_a_button();
     invalid_controller_ports_are_rejected();

@@ -141,6 +141,31 @@ void sixteen_pixel_sprites_select_the_table_from_the_tile_id() {
            "8 by 16 sprites select their pattern table from tile bit zero");
 }
 
+void sixteen_pixel_sprites_fetch_both_tiles_and_flip_vertically() {
+    nes::Ppu normal;
+    hide_all_sprites(normal);
+    normal.oam_write(0, 0xFF);
+    normal.oam_write(1, 2);
+    normal.ppu_write(0x0030, 0x6C);
+    normal.cpu_write(0x2000, 0x20);
+    normal.cpu_write(0x2001, 0x10);
+    clock_until(normal, 7, 258);
+    expect(normal.sprite_pattern_low()[0] == 0x6C,
+           "the lower half of an 8 by 16 sprite uses the following tile");
+
+    nes::Ppu flipped;
+    hide_all_sprites(flipped);
+    flipped.oam_write(0, 0xFF);
+    flipped.oam_write(1, 2);
+    flipped.oam_write(2, 0x80);
+    flipped.ppu_write(0x0027, 0xA7);
+    flipped.cpu_write(0x2000, 0x20);
+    flipped.cpu_write(0x2001, 0x10);
+    clock_until(flipped, 7, 258);
+    expect(flipped.sprite_pattern_low()[0] == 0xA7,
+           "vertical flip crosses the two tiles of an 8 by 16 sprite");
+}
+
 void sprite_pixels_render_from_object_memory() {
     nes::Ppu ppu;
     hide_all_sprites(ppu);
@@ -252,6 +277,7 @@ int run_ppu_sprite_tests() {
     sprite_patterns_honor_table_and_flip_controls();
     vertical_flip_selects_the_opposite_sprite_row();
     sixteen_pixel_sprites_select_the_table_from_the_tile_id();
+    sixteen_pixel_sprites_fetch_both_tiles_and_flip_vertically();
     sprite_pixels_render_from_object_memory();
     sprite_x_counter_delays_pattern_shifting();
     sprite_priority_selects_foreground_or_background();
