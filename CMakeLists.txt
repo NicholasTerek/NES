@@ -35,6 +35,11 @@ add_executable(nes_runner
 )
 target_link_libraries(nes_runner PRIVATE nes_core)
 
+add_executable(nes_conformance
+    tools/nes_conformance.cpp
+)
+target_link_libraries(nes_conformance PRIVATE nes_core)
+
 if(NES_BUILD_SDL)
     find_package(SDL2 QUIET)
     if(SDL2_FOUND)
