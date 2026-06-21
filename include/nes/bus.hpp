@@ -1,5 +1,6 @@
 #pragma once
 
+#include "nes/apu.hpp"
 #include "nes/bus_device.hpp"
 #include "nes/cpu.hpp"
 #include "nes/ppu.hpp"
@@ -25,6 +26,8 @@ public:
     [[nodiscard]] const Cpu& cpu() const noexcept;
     [[nodiscard]] Ppu& ppu() noexcept;
     [[nodiscard]] const Ppu& ppu() const noexcept;
+    [[nodiscard]] Apu& apu() noexcept;
+    [[nodiscard]] const Apu& apu() const noexcept;
     [[nodiscard]] std::uint64_t system_clock() const noexcept;
     [[nodiscard]] bool dma_active() const noexcept;
     void set_controller_state(std::size_t port, std::uint8_t buttons);
@@ -39,6 +42,7 @@ private:
 
     Cpu cpu_;
     Ppu ppu_;
+    Apu apu_;
     std::array<std::uint8_t, cpu_ram_size> cpu_ram_{};
     std::shared_ptr<Cartridge> cartridge_;
     std::uint64_t system_clock_counter_ = 0;
