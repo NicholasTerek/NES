@@ -84,6 +84,7 @@ private:
     std::uint8_t remaining_cycles_ = 0;
     std::uint8_t opcode_ = 0;
     std::uint16_t address_ = 0;
+    std::uint16_t dummy_address_ = 0;
     std::int8_t relative_ = 0;
     bool page_crossed_ = false;
     AddressMode current_mode_ = AddressMode::implied;
@@ -99,6 +100,7 @@ private:
     void execute(Operation operation);
     [[nodiscard]] std::uint8_t operand();
     void store_operand(std::uint8_t value);
+    void store_mutation(std::uint8_t original, std::uint8_t value);
     void set_zero_negative(std::uint8_t value) noexcept;
     void branch(bool condition);
 };

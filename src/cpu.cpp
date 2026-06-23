@@ -31,6 +31,21 @@ void Cpu::clock() {
         remaining_cycles_ = instruction.cycles;
         current_mode_ = instruction.mode;
         resolve_address(instruction.mode);
+        const bool indexed_store = instruction.operation == Operation::sta &&
+            (instruction.mode == AddressMode::absolute_x ||
+             instruction.mode == AddressMode::absolute_y ||
+             instruction.mode == AddressMode::indirect_indexed);
+        const bool indexed_mutation =
+            instruction.mode == AddressMode::absolute_x &&
+            (instruction.operation == Operation::asl ||
+             instruction.operation == Operation::dec ||
+             instruction.operation == Operation::inc ||
+             instruction.operation == Operation::lsr ||
+             instruction.operation == Operation::rol ||
+             instruction.operation == Operation::ror);
+        if ((instruction.page_cycle && page_crossed_) || indexed_store || indexed_mutation) {
+            (void)read(dummy_address_);
+        }
         execute(instruction.operation);
         if (instruction.page_cycle && page_crossed_) {
             ++remaining_cycles_;
@@ -216,11 +231,13 @@ void Cpu::resolve_address(AddressMode mode) {
         address_ = read(state_.program_counter++);
         break;
     case AddressMode::zero_page_x:
-        address_ = static_cast<std::uint8_t>(read(state_.program_counter++) + state_.x);
+    case AddressMode::zero_page_y: {
+        const auto base = read(state_.program_counter++);
+        (void)read(base);
+        const auto offset = mode == AddressMode::zero_page_x ? state_.x : state_.y;
+        address_ = static_cast<std::uint8_t>(base + offset);
         break;
-    case AddressMode::zero_page_y:
-        address_ = static_cast<std::uint8_t>(read(state_.program_counter++) + state_.y);
-        break;
+    }
     case AddressMode::relative:
         relative_ = static_cast<std::int8_t>(read(state_.program_counter++));
         break;
@@ -234,6 +251,8 @@ void Cpu::resolve_address(AddressMode mode) {
         state_.program_counter = static_cast<std::uint16_t>(state_.program_counter + 2U);
         const auto offset = mode == AddressMode::absolute_x ? state_.x : state_.y;
         address_ = static_cast<std::uint16_t>(base + offset);
+        dummy_address_ = static_cast<std::uint16_t>(
+            (base & 0xFF00U) | (address_ & 0x00FFU));
         page_crossed_ = (base & 0xFF00U) != (address_ & 0xFF00U);
         break;
     }
@@ -247,7 +266,9 @@ void Cpu::resolve_address(AddressMode mode) {
         break;
     }
     case AddressMode::indexed_indirect: {
-        const auto pointer = static_cast<std::uint8_t>(read(state_.program_counter++) + state_.x);
+        const auto base = read(state_.program_counter++);
+        (void)read(base);
+        const auto pointer = static_cast<std::uint8_t>(base + state_.x);
         const auto low = read(pointer);
         const auto high = read(static_cast<std::uint8_t>(pointer + 1U));
         address_ = static_cast<std::uint16_t>((static_cast<std::uint16_t>(high) << 8U) | low);
@@ -259,6 +280,8 @@ void Cpu::resolve_address(AddressMode mode) {
         const auto high = read(static_cast<std::uint8_t>(pointer + 1U));
         const auto base = static_cast<std::uint16_t>((static_cast<std::uint16_t>(high) << 8U) | low);
         address_ = static_cast<std::uint16_t>(base + state_.y);
+        dummy_address_ = static_cast<std::uint16_t>(
+            (base & 0xFF00U) | (address_ & 0x00FFU));
         page_crossed_ = (base & 0xFF00U) != (address_ & 0xFF00U);
         break;
     }
@@ -405,7 +428,7 @@ void Cpu::execute(Operation operation) {
         const auto value = operand();
         set_flag(carry, (value & 0x80U) != 0);
         const auto result = static_cast<std::uint8_t>(value << 1U);
-        store_operand(result);
+        store_mutation(value, result);
         set_zero_negative(result);
         break;
     }
@@ -413,7 +436,7 @@ void Cpu::execute(Operation operation) {
         const auto value = operand();
         set_flag(carry, (value & 0x01U) != 0);
         const auto result = static_cast<std::uint8_t>(value >> 1U);
-        store_operand(result);
+        store_mutation(value, result);
         set_zero_negative(result);
         break;
     }
@@ -422,7 +445,7 @@ void Cpu::execute(Operation operation) {
         const auto previous_carry = flag(carry) ? 1U : 0U;
         set_flag(carry, (value & 0x80U) != 0);
         const auto result = static_cast<std::uint8_t>((value << 1U) | previous_carry);
-        store_operand(result);
+        store_mutation(value, result);
         set_zero_negative(result);
         break;
     }
@@ -431,7 +454,7 @@ void Cpu::execute(Operation operation) {
         const auto previous_carry = flag(carry) ? 0x80U : 0U;
         set_flag(carry, (value & 0x01U) != 0);
         const auto result = static_cast<std::uint8_t>((value >> 1U) | previous_carry);
-        store_operand(result);
+        store_mutation(value, result);
         set_zero_negative(result);
         break;
     }
@@ -492,14 +515,16 @@ void Cpu::execute(Operation operation) {
         set_zero_negative(state_.a);
         break;
     case Operation::inc: {
-        const auto value = static_cast<std::uint8_t>(operand() + 1U);
-        store_operand(value);
+        const auto original = operand();
+        const auto value = static_cast<std::uint8_t>(original + 1U);
+        store_mutation(original, value);
         set_zero_negative(value);
         break;
     }
     case Operation::dec: {
-        const auto value = static_cast<std::uint8_t>(operand() - 1U);
-        store_operand(value);
+        const auto original = operand();
+        const auto value = static_cast<std::uint8_t>(original - 1U);
+        store_mutation(original, value);
         set_zero_negative(value);
         break;
     }
@@ -539,6 +564,15 @@ void Cpu::store_operand(std::uint8_t value) {
     }
 }
 
+void Cpu::store_mutation(std::uint8_t original, std::uint8_t value) {
+    if (current_mode_ == AddressMode::accumulator) {
+        state_.a = value;
+    } else {
+        write(address_, original);
+        write(address_, value);
+    }
+}
+
 void Cpu::set_zero_negative(std::uint8_t value) noexcept {
     set_flag(zero, value == 0);
     set_flag(negative, (value & 0x80U) != 0);
@@ -551,11 +585,16 @@ void Cpu::branch(bool condition) {
 
     ++remaining_cycles_;
     const auto original = state_.program_counter;
-    state_.program_counter = static_cast<std::uint16_t>(
+    const auto target = static_cast<std::uint16_t>(
         static_cast<std::int32_t>(state_.program_counter) + relative_);
-    if ((original & 0xFF00U) != (state_.program_counter & 0xFF00U)) {
+    (void)read(original);
+    if ((original & 0xFF00U) != (target & 0xFF00U)) {
+        const auto intermediate = static_cast<std::uint16_t>(
+            (original & 0xFF00U) | (target & 0x00FFU));
+        (void)read(intermediate);
         ++remaining_cycles_;
     }
+    state_.program_counter = target;
 }
 
 }  // namespace nes
