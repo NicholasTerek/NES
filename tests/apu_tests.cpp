@@ -77,6 +77,57 @@ void system_bus_clocks_and_maps_the_apu() {
     expect(bus.cpu_read(0x4015, true) == 0, "$4015 exposes APU status on the CPU bus");
 }
 
+void pulse_registers_load_length_and_generate_a_duty_wave() {
+    nes::Apu apu;
+    apu.cpu_write(0x4015, 0x01);
+    apu.cpu_write(0x4000, 0x1F);
+    apu.cpu_write(0x4002, 0x08);
+    apu.cpu_write(0x4003, 0xF8);
+    expect(apu.state().pulse_length[0] == 30,
+           "pulse length reload uses the hardware length table");
+    expect((apu.cpu_read(0x4015, true) & 0x01U) != 0U,
+           "APU status reports an active first pulse channel");
+
+    apu.clock();
+    apu.clock();
+    expect(apu.state().pulse_level[0] == 15,
+           "pulse timer advances into the configured duty waveform");
+}
+
+void half_frames_clock_pulse_length_and_sweep_units() {
+    nes::Apu apu;
+    apu.cpu_write(0x4015, 0x03);
+    apu.cpu_write(0x4000, 0x1F);
+    apu.cpu_write(0x4002, 0x00);
+    apu.cpu_write(0x4003, 0x01);
+    apu.cpu_write(0x4001, 0x81);
+    apu.cpu_write(0x4004, 0x1F);
+    apu.cpu_write(0x4006, 0x00);
+    apu.cpu_write(0x4007, 0x01);
+    apu.cpu_write(0x4005, 0x89);
+    const auto before = apu.state();
+    clock_apu(apu, 7'457);
+    const auto after = apu.state();
+    expect(after.pulse_length[0] + 1U == before.pulse_length[0],
+           "half-frame clocks decrement pulse length counters");
+    expect(after.pulse_period[0] > before.pulse_period[0],
+           "positive pulse sweep raises the first timer period");
+    expect(after.pulse_period[1] < before.pulse_period[1],
+           "negated pulse sweep lowers the second timer period");
+}
+
+void channel_enable_bits_clear_pulse_lengths() {
+    nes::Apu apu;
+    apu.cpu_write(0x4015, 0x03);
+    apu.cpu_write(0x4003, 0xF8);
+    apu.cpu_write(0x4007, 0xF8);
+    apu.cpu_write(0x4015, 0x02);
+    expect(apu.state().pulse_length[0] == 0,
+           "disabling pulse one immediately clears its length counter");
+    expect(apu.state().pulse_length[1] != 0,
+           "pulse two remains active when its enable bit stays set");
+}
+
 }  // namespace
 
 int run_apu_tests() {
@@ -86,5 +137,8 @@ int run_apu_tests() {
     five_step_sequence_never_raises_a_frame_interrupt();
     frame_irq_inhibit_clears_and_suppresses_interrupts();
     system_bus_clocks_and_maps_the_apu();
+    pulse_registers_load_length_and_generate_a_duty_wave();
+    half_frames_clock_pulse_length_and_sweep_units();
+    channel_enable_bits_clear_pulse_lengths();
     return nes::test::failures - before;
 }
