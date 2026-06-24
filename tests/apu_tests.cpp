@@ -128,6 +128,55 @@ void channel_enable_bits_clear_pulse_lengths() {
            "pulse two remains active when its enable bit stays set");
 }
 
+void triangle_linear_counter_gates_its_waveform() {
+    nes::Apu apu;
+    apu.cpu_write(0x4015, 0x04);
+    apu.cpu_write(0x4008, 0x82);
+    apu.cpu_write(0x400A, 0x02);
+    apu.cpu_write(0x400B, 0xF8);
+    expect(apu.state().triangle_length == 30,
+           "triangle high timer write loads its length counter");
+    expect(apu.state().triangle_level == 0,
+           "triangle stays silent until the linear counter reloads");
+    clock_apu(apu, 3'729);
+    expect(apu.state().triangle_linear == 2,
+           "quarter-frame reloads the triangle linear counter");
+    clock_apu(apu, 4);
+    expect(apu.state().triangle_level != 0,
+           "triangle timer produces its 32-step waveform when both counters are active");
+}
+
+void noise_channel_clocks_its_feedback_register() {
+    nes::Apu apu;
+    apu.cpu_write(0x4015, 0x08);
+    apu.cpu_write(0x400C, 0x1A);
+    apu.cpu_write(0x400E, 0x80);
+    apu.cpu_write(0x400F, 0xF8);
+    expect(apu.state().noise_length == 30,
+           "noise length reload uses the shared hardware length table");
+    const auto before = apu.state().noise_shift;
+    apu.clock();
+    apu.clock();
+    expect(apu.state().noise_shift != before,
+           "noise timer advances the short-mode feedback register");
+    expect(apu.state().noise_level == 10,
+           "noise output uses the configured constant volume");
+    expect((apu.cpu_read(0x4015, true) & 0x08U) != 0U,
+           "APU status reports an active noise channel");
+}
+
+void triangle_and_noise_disable_bits_clear_lengths() {
+    nes::Apu apu;
+    apu.cpu_write(0x4015, 0x0C);
+    apu.cpu_write(0x400B, 0xF8);
+    apu.cpu_write(0x400F, 0xF8);
+    apu.cpu_write(0x4015, 0x00);
+    expect(apu.state().triangle_length == 0,
+           "disabling triangle clears its length counter");
+    expect(apu.state().noise_length == 0,
+           "disabling noise clears its length counter");
+}
+
 }  // namespace
 
 int run_apu_tests() {
@@ -140,5 +189,8 @@ int run_apu_tests() {
     pulse_registers_load_length_and_generate_a_duty_wave();
     half_frames_clock_pulse_length_and_sweep_units();
     channel_enable_bits_clear_pulse_lengths();
+    triangle_linear_counter_gates_its_waveform();
+    noise_channel_clocks_its_feedback_register();
+    triangle_and_noise_disable_bits_clear_lengths();
     return nes::test::failures - before;
 }

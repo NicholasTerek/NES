@@ -17,6 +17,15 @@ constexpr std::array<std::array<std::uint8_t, 8>, 4> duty_table{{
     {{1, 0, 0, 1, 1, 1, 1, 1}},
 }};
 
+constexpr std::array<std::uint8_t, 32> triangle_table{
+    15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0,
+    0,  1,  2,  3,  4,  5,  6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+};
+
+constexpr std::array<std::uint16_t, 16> noise_period_table{
+    4, 8, 16, 32, 64, 96, 128, 160, 202, 254, 380, 508, 762, 1'016, 2'034, 4'068,
+};
+
 }  // namespace
 
 void Apu::reset() noexcept {
@@ -28,14 +37,20 @@ void Apu::reset() noexcept {
     irq_inhibit_ = false;
     frame_irq_ = false;
     pulse_ = {};
+    triangle_ = {};
+    noise_ = {};
+    noise_.shift_register = 1;
+    noise_.timer_period = noise_period_table[0];
 }
 
 void Apu::clock() noexcept {
     ++cpu_cycle_;
     ++frame_cycle_;
+    clock_triangle_timer();
     if ((cpu_cycle_ & 0x01U) == 0U) {
         clock_pulse_timer(pulse_[0]);
         clock_pulse_timer(pulse_[1]);
+        clock_noise_timer();
     }
 
     if (!five_step_mode_) {
@@ -91,6 +106,12 @@ std::uint8_t Apu::cpu_read(std::uint16_t address, bool read_only) noexcept {
     if (pulse_[1].length_counter != 0U) {
         status = static_cast<std::uint8_t>(status | 0x02U);
     }
+    if (triangle_.length_counter != 0U) {
+        status = static_cast<std::uint8_t>(status | 0x04U);
+    }
+    if (noise_.length_counter != 0U) {
+        status = static_cast<std::uint8_t>(status | 0x08U);
+    }
     if (!read_only) {
         frame_irq_ = false;
     }
@@ -103,14 +124,60 @@ void Apu::cpu_write(std::uint16_t address, std::uint8_t value) noexcept {
         write_pulse(index, static_cast<std::uint16_t>(address & 0x0003U), value);
         return;
     }
+    if (address == 0x4008U) {
+        triangle_.control = (value & 0x80U) != 0U;
+        triangle_.linear_reload = static_cast<std::uint8_t>(value & 0x7FU);
+        return;
+    }
+    if (address == 0x400AU) {
+        triangle_.timer_period = static_cast<std::uint16_t>(
+            (triangle_.timer_period & 0x0700U) | value);
+        return;
+    }
+    if (address == 0x400BU) {
+        triangle_.timer_period = static_cast<std::uint16_t>(
+            (triangle_.timer_period & 0x00FFU) |
+            (static_cast<std::uint16_t>(value & 0x07U) << 8U));
+        if (triangle_.enabled) {
+            triangle_.length_counter = length_table[value >> 3U];
+        }
+        triangle_.linear_reload_flag = true;
+        return;
+    }
+    if (address == 0x400CU) {
+        noise_.length_halt = (value & 0x20U) != 0U;
+        noise_.constant_volume = (value & 0x10U) != 0U;
+        noise_.envelope_period = static_cast<std::uint8_t>(value & 0x0FU);
+        return;
+    }
+    if (address == 0x400EU) {
+        noise_.mode = (value & 0x80U) != 0U;
+        noise_.timer_period = noise_period_table[value & 0x0FU];
+        return;
+    }
+    if (address == 0x400FU) {
+        if (noise_.enabled) {
+            noise_.length_counter = length_table[value >> 3U];
+        }
+        noise_.envelope_start = true;
+        return;
+    }
     if (address == 0x4015U) {
         pulse_[0].enabled = (value & 0x01U) != 0U;
         pulse_[1].enabled = (value & 0x02U) != 0U;
+        triangle_.enabled = (value & 0x04U) != 0U;
+        noise_.enabled = (value & 0x08U) != 0U;
         if (!pulse_[0].enabled) {
             pulse_[0].length_counter = 0;
         }
         if (!pulse_[1].enabled) {
             pulse_[1].length_counter = 0;
+        }
+        if (!triangle_.enabled) {
+            triangle_.length_counter = 0;
+        }
+        if (!noise_.enabled) {
+            noise_.length_counter = 0;
         }
         return;
     }
@@ -142,6 +209,14 @@ Apu::State Apu::state() const noexcept {
         state.pulse_period[index] = pulse_[index].timer_period;
         state.pulse_level[index] = pulse_level(index);
     }
+    state.triangle_length = triangle_.length_counter;
+    state.triangle_linear = triangle_.linear_counter;
+    state.triangle_period = triangle_.timer_period;
+    state.triangle_level = triangle_level();
+    state.noise_length = noise_.length_counter;
+    state.noise_period = noise_.timer_period;
+    state.noise_shift = noise_.shift_register;
+    state.noise_level = noise_level();
     return state;
 }
 
@@ -149,6 +224,15 @@ void Apu::clock_quarter_frame() noexcept {
     ++quarter_frame_ticks_;
     clock_envelope(pulse_[0]);
     clock_envelope(pulse_[1]);
+    if (triangle_.linear_reload_flag) {
+        triangle_.linear_counter = triangle_.linear_reload;
+    } else if (triangle_.linear_counter != 0U) {
+        --triangle_.linear_counter;
+    }
+    if (!triangle_.control) {
+        triangle_.linear_reload_flag = false;
+    }
+    clock_noise_envelope();
 }
 
 void Apu::clock_half_frame() noexcept {
@@ -157,6 +241,12 @@ void Apu::clock_half_frame() noexcept {
         if (!pulse.length_halt && pulse.length_counter != 0U) {
             --pulse.length_counter;
         }
+    }
+    if (!triangle_.control && triangle_.length_counter != 0U) {
+        --triangle_.length_counter;
+    }
+    if (!noise_.length_halt && noise_.length_counter != 0U) {
+        --noise_.length_counter;
     }
     clock_sweep(pulse_[0], true);
     clock_sweep(pulse_[1], false);
@@ -257,6 +347,66 @@ std::uint8_t Apu::pulse_level(std::size_t index) const noexcept {
         return 0;
     }
     return pulse.constant_volume ? pulse.envelope_period : pulse.envelope_decay;
+}
+
+void Apu::clock_triangle_timer() noexcept {
+    if (triangle_.timer_counter == 0U) {
+        triangle_.timer_counter = triangle_.timer_period;
+        if (triangle_.enabled && triangle_.length_counter != 0U &&
+            triangle_.linear_counter != 0U && triangle_.timer_period >= 2U) {
+            triangle_.sequence = static_cast<std::uint8_t>((triangle_.sequence + 1U) & 0x1FU);
+        }
+    } else {
+        --triangle_.timer_counter;
+    }
+}
+
+void Apu::clock_noise_timer() noexcept {
+    if (noise_.timer_counter != 0U) {
+        --noise_.timer_counter;
+        return;
+    }
+    noise_.timer_counter = noise_.timer_period;
+    const auto tap = static_cast<std::uint8_t>(noise_.mode ? 6U : 1U);
+    const auto feedback = static_cast<std::uint16_t>(
+        (noise_.shift_register & 0x01U) ^ ((noise_.shift_register >> tap) & 0x01U));
+    noise_.shift_register = static_cast<std::uint16_t>(
+        (noise_.shift_register >> 1U) | (feedback << 14U));
+}
+
+void Apu::clock_noise_envelope() noexcept {
+    if (noise_.envelope_start) {
+        noise_.envelope_start = false;
+        noise_.envelope_decay = 15;
+        noise_.envelope_divider = noise_.envelope_period;
+        return;
+    }
+    if (noise_.envelope_divider != 0U) {
+        --noise_.envelope_divider;
+        return;
+    }
+    noise_.envelope_divider = noise_.envelope_period;
+    if (noise_.envelope_decay != 0U) {
+        --noise_.envelope_decay;
+    } else if (noise_.length_halt) {
+        noise_.envelope_decay = 15;
+    }
+}
+
+std::uint8_t Apu::triangle_level() const noexcept {
+    if (!triangle_.enabled || triangle_.length_counter == 0U ||
+        triangle_.linear_counter == 0U) {
+        return 0;
+    }
+    return triangle_table[triangle_.sequence];
+}
+
+std::uint8_t Apu::noise_level() const noexcept {
+    if (!noise_.enabled || noise_.length_counter == 0U ||
+        (noise_.shift_register & 0x01U) != 0U) {
+        return 0;
+    }
+    return noise_.constant_volume ? noise_.envelope_period : noise_.envelope_decay;
 }
 
 }  // namespace nes
