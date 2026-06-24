@@ -98,6 +98,18 @@ void status_reads_acknowledge_vertical_blank() {
            "live PPUSTATUS read acknowledges vertical blank");
 }
 
+void status_reads_at_the_vblank_edge_suppress_the_flag() {
+    nes::Ppu ppu;
+    ppu.cpu_write(0x2000, 0x80);
+    clock_until(ppu, 241, 1);
+    expect((ppu.cpu_read(0x2002) & 0x80U) == 0U,
+           "PPUSTATUS is still clear immediately before the vertical-blank edge");
+    ppu.clock();
+    expect((ppu.state().status & 0x80U) == 0U,
+           "an edge-aligned PPUSTATUS read suppresses vertical blank");
+    expect(!ppu.poll_nmi(), "suppressed vertical blank does not raise NMI");
+}
+
 void system_clock_runs_the_ppu_three_times_faster() {
     nes::Bus bus;
     bus.reset();
@@ -150,11 +162,17 @@ void system_bus_delivers_ppu_nmi_to_the_cpu() {
     nes::Bus bus;
     bus.insert_cartridge(nmi_cartridge());
     bus.reset();
+    while (!bus.cpu().instruction_complete()) {
+        bus.clock();
+    }
     bus.cpu_write(0x2000, 0x80);
     clock_until(bus.ppu(), 241, 1);
     bus.clock();
+    for (int count = 0; count < 9 && bus.cpu().state().program_counter != 0x9000; ++count) {
+        bus.clock();
+    }
     expect(bus.cpu().state().program_counter == 0x9000,
-           "system bus delivers the PPU NMI vector to the CPU");
+           "system bus delivers the PPU NMI vector at an instruction boundary");
     expect(bus.cpu().state().stack_pointer == 0xFA,
            "CPU pushes its return state when the PPU raises NMI");
 }
@@ -168,6 +186,7 @@ int run_ppu_timing_tests() {
     odd_rendering_frames_skip_one_ppu_clock();
     disabled_rendering_keeps_full_length_frames();
     status_reads_acknowledge_vertical_blank();
+    status_reads_at_the_vblank_edge_suppress_the_flag();
     system_clock_runs_the_ppu_three_times_faster();
     vertical_blank_raises_one_nmi_request();
     enabling_nmi_during_vertical_blank_requests_it_immediately();

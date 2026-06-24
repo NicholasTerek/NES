@@ -66,6 +66,7 @@ public:
     [[nodiscard]] std::uint8_t pixel(std::size_t x, std::size_t y) const;
     void clear_frame_complete() noexcept;
     [[nodiscard]] bool poll_nmi() noexcept;
+    [[nodiscard]] bool nmi_requires_instruction_delay() const noexcept;
     [[nodiscard]] std::uint8_t oam_read(std::uint8_t address) const noexcept;
     void oam_write(std::uint8_t address, std::uint8_t value) noexcept;
     [[nodiscard]] const std::array<std::uint8_t, 256>& oam() const noexcept;
@@ -117,6 +118,8 @@ private:
     bool frame_complete_ = false;
     bool odd_frame_ = false;
     bool nmi_pending_ = false;
+    bool nmi_instruction_delay_ = false;
+    bool suppress_vertical_blank_ = false;
 
     std::uint8_t next_tile_id_ = 0;
     std::uint8_t next_tile_attribute_ = 0;

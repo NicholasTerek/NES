@@ -49,6 +49,9 @@ std::uint8_t Ppu::cpu_read(std::uint16_t address, bool read_only) {
     std::uint8_t value = open_bus_;
     switch (selected_register) {
     case 2:
+        if (scanline_ == 241 && cycle_ == 1) {
+            suppress_vertical_blank_ = true;
+        }
         value = static_cast<std::uint8_t>((status_ & 0xE0U) | (open_bus_ & 0x1FU));
         status_ = static_cast<std::uint8_t>(status_ & ~status_vertical_blank);
         write_latch_ = false;
@@ -85,6 +88,7 @@ void Ppu::cpu_write(std::uint16_t address, std::uint8_t value) {
         if ((control_ & control_enable_nmi) == 0U && (value & control_enable_nmi) != 0U &&
             (status_ & status_vertical_blank) != 0U) {
             nmi_pending_ = true;
+            nmi_instruction_delay_ = true;
         }
         control_ = value;
         temporary_address_ = static_cast<std::uint16_t>(
@@ -180,9 +184,14 @@ void Ppu::clock() {
             status_ & ~(status_vertical_blank | status_sprite_overflow | status_sprite_zero_hit));
     }
     if (scanline_ == 241 && cycle_ == 1) {
-        status_ = static_cast<std::uint8_t>(status_ | status_vertical_blank);
-        if ((control_ & control_enable_nmi) != 0U) {
-            nmi_pending_ = true;
+        if (suppress_vertical_blank_) {
+            suppress_vertical_blank_ = false;
+        } else {
+            status_ = static_cast<std::uint8_t>(status_ | status_vertical_blank);
+            if ((control_ & control_enable_nmi) != 0U) {
+                nmi_pending_ = true;
+                nmi_instruction_delay_ = false;
+            }
         }
     }
 
@@ -253,6 +262,8 @@ void Ppu::reset() {
     frame_complete_ = false;
     odd_frame_ = false;
     nmi_pending_ = false;
+    nmi_instruction_delay_ = false;
+    suppress_vertical_blank_ = false;
     next_tile_id_ = 0;
     next_tile_attribute_ = 0;
     next_tile_low_ = 0;
@@ -286,7 +297,12 @@ void Ppu::clear_frame_complete() noexcept {
 bool Ppu::poll_nmi() noexcept {
     const auto pending = nmi_pending_;
     nmi_pending_ = false;
+    nmi_instruction_delay_ = false;
     return pending;
+}
+
+bool Ppu::nmi_requires_instruction_delay() const noexcept {
+    return nmi_pending_ && nmi_instruction_delay_;
 }
 
 std::uint8_t Ppu::oam_read(std::uint8_t address) const noexcept {
