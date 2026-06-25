@@ -177,6 +177,56 @@ void triangle_and_noise_disable_bits_clear_lengths() {
            "disabling noise clears its length counter");
 }
 
+void dmc_fetches_samples_and_stalls_the_cpu() {
+    nes::Apu apu;
+    std::uint16_t fetched_address = 0;
+    apu.set_dmc_reader([&fetched_address](std::uint16_t address) {
+        fetched_address = address;
+        return std::uint8_t{0xFF};
+    });
+    apu.cpu_write(0x4010, 0x0F);
+    apu.cpu_write(0x4011, 0x40);
+    apu.cpu_write(0x4012, 0x02);
+    apu.cpu_write(0x4013, 0x00);
+    apu.cpu_write(0x4015, 0x10);
+    apu.clock();
+    expect(fetched_address == 0xC080,
+           "DMC sample address register selects a byte in CPU program space");
+    expect(apu.take_cpu_stall_cycles() == 4,
+           "each DMC memory fetch requests four CPU stall cycles");
+    expect(apu.state().dmc_address == 0xC081,
+           "DMC advances its memory reader after fetching a sample byte");
+
+    clock_apu(apu, 55);
+    expect(apu.state().dmc_output == 0x42,
+           "DMC output unit applies sample bits in two-level steps");
+}
+
+void dmc_loop_and_interrupt_controls_follow_status_registers() {
+    nes::Apu interrupting;
+    interrupting.set_dmc_reader([](std::uint16_t) { return std::uint8_t{0}; });
+    interrupting.cpu_write(0x4010, 0x80);
+    interrupting.cpu_write(0x4013, 0x00);
+    interrupting.cpu_write(0x4015, 0x10);
+    interrupting.clock();
+    expect(interrupting.state().dmc_irq, "final DMC fetch raises an enabled interrupt");
+    expect((interrupting.cpu_read(0x4015) & 0x80U) != 0U,
+           "APU status reports DMC interrupts without acknowledging them");
+    expect(interrupting.irq_pending(), "DMC interrupt remains asserted after a status read");
+    interrupting.cpu_write(0x4015, 0x00);
+    expect(!interrupting.irq_pending(), "$4015 writes acknowledge the DMC interrupt");
+
+    nes::Apu looping;
+    looping.set_dmc_reader([](std::uint16_t) { return std::uint8_t{0}; });
+    looping.cpu_write(0x4010, 0xC0);
+    looping.cpu_write(0x4013, 0x00);
+    looping.cpu_write(0x4015, 0x10);
+    looping.clock();
+    expect(looping.state().dmc_bytes_remaining == 1,
+           "DMC loop restarts the configured sample after its final fetch");
+    expect(!looping.state().dmc_irq, "looping DMC playback does not raise an interrupt");
+}
+
 }  // namespace
 
 int run_apu_tests() {
@@ -192,5 +242,7 @@ int run_apu_tests() {
     triangle_linear_counter_gates_its_waveform();
     noise_channel_clocks_its_feedback_register();
     triangle_and_noise_disable_bits_clear_lengths();
+    dmc_fetches_samples_and_stalls_the_cpu();
+    dmc_loop_and_interrupt_controls_follow_status_registers();
     return nes::test::failures - before;
 }

@@ -51,6 +51,7 @@ private:
     std::uint8_t dma_data_ = 0;
     bool dma_dummy_ = true;
     bool dma_transfer_ = false;
+    std::uint8_t dmc_stall_cycles_ = 0;
     std::array<std::uint8_t, 2> controller_state_{};
     std::array<std::uint8_t, 2> controller_shift_{};
     bool controller_strobe_ = false;

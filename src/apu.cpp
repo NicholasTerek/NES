@@ -1,6 +1,7 @@
 #include "nes/apu.hpp"
 
 #include <array>
+#include <utility>
 
 namespace nes {
 namespace {
@@ -26,6 +27,10 @@ constexpr std::array<std::uint16_t, 16> noise_period_table{
     4, 8, 16, 32, 64, 96, 128, 160, 202, 254, 380, 508, 762, 1'016, 2'034, 4'068,
 };
 
+constexpr std::array<std::uint16_t, 16> dmc_rate_table{
+    428, 380, 340, 320, 286, 254, 226, 214, 190, 160, 142, 128, 106, 84, 72, 54,
+};
+
 }  // namespace
 
 void Apu::reset() noexcept {
@@ -41,11 +46,18 @@ void Apu::reset() noexcept {
     noise_ = {};
     noise_.shift_register = 1;
     noise_.timer_period = noise_period_table[0];
+    dmc_ = {};
+    dmc_.timer_period = dmc_rate_table[0];
+    dmc_.sample_address = 0xC000;
+    dmc_.sample_length = 1;
+    dmc_.current_address = 0xC000;
+    pending_cpu_stall_ = 0;
 }
 
 void Apu::clock() noexcept {
     ++cpu_cycle_;
     ++frame_cycle_;
+    clock_dmc();
     clock_triangle_timer();
     if ((cpu_cycle_ & 0x01U) == 0U) {
         clock_pulse_timer(pulse_[0]);
@@ -112,6 +124,12 @@ std::uint8_t Apu::cpu_read(std::uint16_t address, bool read_only) noexcept {
     if (noise_.length_counter != 0U) {
         status = static_cast<std::uint8_t>(status | 0x08U);
     }
+    if (dmc_.bytes_remaining != 0U) {
+        status = static_cast<std::uint8_t>(status | 0x10U);
+    }
+    if (dmc_.irq) {
+        status = static_cast<std::uint8_t>(status | 0x80U);
+    }
     if (!read_only) {
         frame_irq_ = false;
     }
@@ -162,11 +180,35 @@ void Apu::cpu_write(std::uint16_t address, std::uint8_t value) noexcept {
         noise_.envelope_start = true;
         return;
     }
+    if (address == 0x4010U) {
+        dmc_.irq_enabled = (value & 0x80U) != 0U;
+        dmc_.loop = (value & 0x40U) != 0U;
+        dmc_.timer_period = dmc_rate_table[value & 0x0FU];
+        if (!dmc_.irq_enabled) {
+            dmc_.irq = false;
+        }
+        return;
+    }
+    if (address == 0x4011U) {
+        dmc_.output_level = static_cast<std::uint8_t>(value & 0x7FU);
+        return;
+    }
+    if (address == 0x4012U) {
+        dmc_.sample_address = static_cast<std::uint16_t>(
+            0xC000U + static_cast<std::uint16_t>(value) * 64U);
+        return;
+    }
+    if (address == 0x4013U) {
+        dmc_.sample_length = static_cast<std::uint16_t>(
+            static_cast<std::uint16_t>(value) * 16U + 1U);
+        return;
+    }
     if (address == 0x4015U) {
         pulse_[0].enabled = (value & 0x01U) != 0U;
         pulse_[1].enabled = (value & 0x02U) != 0U;
         triangle_.enabled = (value & 0x04U) != 0U;
         noise_.enabled = (value & 0x08U) != 0U;
+        dmc_.enabled = (value & 0x10U) != 0U;
         if (!pulse_[0].enabled) {
             pulse_[0].length_counter = 0;
         }
@@ -179,6 +221,12 @@ void Apu::cpu_write(std::uint16_t address, std::uint8_t value) noexcept {
         if (!noise_.enabled) {
             noise_.length_counter = 0;
         }
+        if (!dmc_.enabled) {
+            dmc_.bytes_remaining = 0;
+        } else if (dmc_.bytes_remaining == 0U) {
+            restart_dmc_sample();
+        }
+        dmc_.irq = false;
         return;
     }
     if (address != 0x4017U) {
@@ -197,8 +245,18 @@ void Apu::cpu_write(std::uint16_t address, std::uint8_t value) noexcept {
     }
 }
 
+void Apu::set_dmc_reader(std::function<std::uint8_t(std::uint16_t)> reader) {
+    dmc_reader_ = std::move(reader);
+}
+
+std::uint8_t Apu::take_cpu_stall_cycles() noexcept {
+    const auto cycles = pending_cpu_stall_;
+    pending_cpu_stall_ = 0;
+    return cycles;
+}
+
 bool Apu::irq_pending() const noexcept {
-    return frame_irq_;
+    return frame_irq_ || dmc_.irq;
 }
 
 Apu::State Apu::state() const noexcept {
@@ -217,6 +275,10 @@ Apu::State Apu::state() const noexcept {
     state.noise_period = noise_.timer_period;
     state.noise_shift = noise_.shift_register;
     state.noise_level = noise_level();
+    state.dmc_address = dmc_.current_address;
+    state.dmc_bytes_remaining = dmc_.bytes_remaining;
+    state.dmc_output = dmc_.output_level;
+    state.dmc_irq = dmc_.irq;
     return state;
 }
 
@@ -407,6 +469,59 @@ std::uint8_t Apu::noise_level() const noexcept {
         return 0;
     }
     return noise_.constant_volume ? noise_.envelope_period : noise_.envelope_decay;
+}
+
+void Apu::clock_dmc() noexcept {
+    if (dmc_.buffer_empty && dmc_.bytes_remaining != 0U) {
+        dmc_.sample_buffer = dmc_reader_ ? dmc_reader_(dmc_.current_address) : 0;
+        dmc_.buffer_empty = false;
+        pending_cpu_stall_ = static_cast<std::uint8_t>(pending_cpu_stall_ + 4U);
+        dmc_.current_address = dmc_.current_address == 0xFFFFU
+                                   ? 0x8000U
+                                   : static_cast<std::uint16_t>(dmc_.current_address + 1U);
+        --dmc_.bytes_remaining;
+        if (dmc_.bytes_remaining == 0U) {
+            if (dmc_.loop) {
+                restart_dmc_sample();
+            } else if (dmc_.irq_enabled) {
+                dmc_.irq = true;
+            }
+        }
+    }
+
+    if (dmc_.timer_counter != 0U) {
+        --dmc_.timer_counter;
+        return;
+    }
+    dmc_.timer_counter = dmc_.timer_period;
+    if (!dmc_.silence) {
+        if ((dmc_.shift_register & 0x01U) != 0U) {
+            if (dmc_.output_level <= 125U) {
+                dmc_.output_level = static_cast<std::uint8_t>(dmc_.output_level + 2U);
+            }
+        } else if (dmc_.output_level >= 2U) {
+            dmc_.output_level = static_cast<std::uint8_t>(dmc_.output_level - 2U);
+        }
+        dmc_.shift_register = static_cast<std::uint8_t>(dmc_.shift_register >> 1U);
+    }
+    if (dmc_.bits_remaining != 0U) {
+        --dmc_.bits_remaining;
+    }
+    if (dmc_.bits_remaining == 0U) {
+        dmc_.bits_remaining = 8;
+        if (dmc_.buffer_empty) {
+            dmc_.silence = true;
+        } else {
+            dmc_.silence = false;
+            dmc_.shift_register = dmc_.sample_buffer;
+            dmc_.buffer_empty = true;
+        }
+    }
+}
+
+void Apu::restart_dmc_sample() noexcept {
+    dmc_.current_address = dmc_.sample_address;
+    dmc_.bytes_remaining = dmc_.sample_length;
 }
 
 }  // namespace nes

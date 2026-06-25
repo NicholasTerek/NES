@@ -7,7 +7,9 @@
 
 namespace nes {
 
-Bus::Bus() : cpu_(*this) {}
+Bus::Bus() : cpu_(*this) {
+    apu_.set_dmc_reader([this](std::uint16_t address) { return cpu_read(address); });
+}
 
 void Bus::insert_cartridge(std::shared_ptr<Cartridge> cartridge) {
     if (!cartridge) {
@@ -30,6 +32,7 @@ void Bus::reset() {
     dma_data_ = 0;
     dma_dummy_ = true;
     dma_transfer_ = false;
+    dmc_stall_cycles_ = 0;
     controller_shift_.fill(0);
     controller_strobe_ = false;
 }
@@ -41,6 +44,8 @@ void Bus::clock() {
     }
     if (system_clock_counter_ % 3U == 0U) {
         apu_.clock();
+        dmc_stall_cycles_ = static_cast<std::uint8_t>(
+            dmc_stall_cycles_ + apu_.take_cpu_stall_cycles());
         if (apu_.irq_pending()) {
             cpu_.irq();
         }
@@ -61,6 +66,8 @@ void Bus::clock() {
                     dma_dummy_ = true;
                 }
             }
+        } else if (dmc_stall_cycles_ != 0U) {
+            --dmc_stall_cycles_;
         } else {
             cpu_.clock();
         }

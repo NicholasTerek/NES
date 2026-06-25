@@ -3,6 +3,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 
 namespace nes {
 
@@ -27,6 +28,10 @@ public:
         std::uint16_t noise_period = 0;
         std::uint16_t noise_shift = 1;
         std::uint8_t noise_level = 0;
+        std::uint16_t dmc_address = 0xC000;
+        std::uint16_t dmc_bytes_remaining = 0;
+        std::uint8_t dmc_output = 0;
+        bool dmc_irq = false;
     };
 
     void reset() noexcept;
@@ -34,6 +39,8 @@ public:
     [[nodiscard]] std::uint8_t cpu_read(std::uint16_t address,
                                         bool read_only = false) noexcept;
     void cpu_write(std::uint16_t address, std::uint8_t value) noexcept;
+    void set_dmc_reader(std::function<std::uint8_t(std::uint16_t)> reader);
+    [[nodiscard]] std::uint8_t take_cpu_stall_cycles() noexcept;
 
     [[nodiscard]] bool irq_pending() const noexcept;
     [[nodiscard]] State state() const noexcept;
@@ -87,6 +94,25 @@ private:
         std::uint8_t length_counter = 0;
     };
 
+    struct Dmc {
+        bool enabled = false;
+        bool irq_enabled = false;
+        bool loop = false;
+        bool irq = false;
+        std::uint16_t timer_period = 428;
+        std::uint16_t timer_counter = 0;
+        std::uint8_t output_level = 0;
+        std::uint16_t sample_address = 0xC000;
+        std::uint16_t sample_length = 1;
+        std::uint16_t current_address = 0xC000;
+        std::uint16_t bytes_remaining = 0;
+        std::uint8_t sample_buffer = 0;
+        bool buffer_empty = true;
+        std::uint8_t shift_register = 0;
+        std::uint8_t bits_remaining = 0;
+        bool silence = true;
+    };
+
     void clock_quarter_frame() noexcept;
     void clock_half_frame() noexcept;
     void write_pulse(std::size_t index, std::uint16_t address,
@@ -97,6 +123,8 @@ private:
     void clock_triangle_timer() noexcept;
     void clock_noise_timer() noexcept;
     void clock_noise_envelope() noexcept;
+    void clock_dmc() noexcept;
+    void restart_dmc_sample() noexcept;
     [[nodiscard]] std::uint8_t pulse_level(std::size_t index) const noexcept;
     [[nodiscard]] std::uint8_t triangle_level() const noexcept;
     [[nodiscard]] std::uint8_t noise_level() const noexcept;
@@ -113,6 +141,9 @@ private:
     std::array<Pulse, 2> pulse_{};
     Triangle triangle_{};
     Noise noise_{};
+    Dmc dmc_{};
+    std::function<std::uint8_t(std::uint16_t)> dmc_reader_;
+    std::uint8_t pending_cpu_stall_ = 0;
 };
 
 }  // namespace nes
