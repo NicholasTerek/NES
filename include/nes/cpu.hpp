@@ -68,7 +68,10 @@ private:
         clc, cld, cli, clv, cmp, cpx, cpy, dec, dex, dey, eor_, inc, inx,
         iny, jmp, jsr, lda, ldx, ldy, lsr, nop, ora, pha, php, pla, plp,
         rol, ror, rti, rts, sbc, sec, sed, sei, sta, stx, sty, tax, tay,
-        tsx, txa, txs, tya, illegal,
+        tsx, txa, txs, tya,
+        ahx, alr, anc, arr, atx, axs, dcp, isc, las, lax, rla, rra, sax, shx,
+        shy, slo, sre, tas,
+        illegal,
     };
 
     struct Instruction {

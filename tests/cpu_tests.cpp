@@ -312,6 +312,7 @@ int run_cpu_addressing_tests();
 int run_cpu_alu_tests();
 int run_cpu_mutation_tests();
 int run_cpu_control_tests();
+int run_cpu_unofficial_tests();
 int run_cartridge_tests();
 int run_bus_tests();
 int run_ppu_memory_tests();
@@ -340,6 +341,7 @@ int main() {
     static_cast<void>(run_cpu_alu_tests());
     static_cast<void>(run_cpu_mutation_tests());
     static_cast<void>(run_cpu_control_tests());
+    static_cast<void>(run_cpu_unofficial_tests());
     failures += run_cartridge_tests();
     static_cast<void>(run_bus_tests());
     static_cast<void>(run_ppu_memory_tests());

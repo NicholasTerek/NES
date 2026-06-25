@@ -31,18 +31,34 @@ void Cpu::clock() {
         remaining_cycles_ = instruction.cycles;
         current_mode_ = instruction.mode;
         resolve_address(instruction.mode);
-        const bool indexed_store = instruction.operation == Operation::sta &&
+        const bool indexed_store =
+            (instruction.operation == Operation::sta ||
+             instruction.operation == Operation::ahx ||
+             instruction.operation == Operation::shx ||
+             instruction.operation == Operation::shy ||
+             instruction.operation == Operation::tas) &&
             (instruction.mode == AddressMode::absolute_x ||
              instruction.mode == AddressMode::absolute_y ||
              instruction.mode == AddressMode::indirect_indexed);
+        const bool composite_mutation =
+            instruction.operation == Operation::dcp ||
+            instruction.operation == Operation::isc ||
+            instruction.operation == Operation::rla ||
+            instruction.operation == Operation::rra ||
+            instruction.operation == Operation::slo ||
+            instruction.operation == Operation::sre;
         const bool indexed_mutation =
-            instruction.mode == AddressMode::absolute_x &&
-            (instruction.operation == Operation::asl ||
-             instruction.operation == Operation::dec ||
-             instruction.operation == Operation::inc ||
-             instruction.operation == Operation::lsr ||
-             instruction.operation == Operation::rol ||
-             instruction.operation == Operation::ror);
+            (instruction.mode == AddressMode::absolute_x &&
+             (instruction.operation == Operation::asl ||
+              instruction.operation == Operation::dec ||
+              instruction.operation == Operation::inc ||
+              instruction.operation == Operation::lsr ||
+              instruction.operation == Operation::rol ||
+              instruction.operation == Operation::ror)) ||
+            (composite_mutation &&
+             (instruction.mode == AddressMode::absolute_x ||
+              instruction.mode == AddressMode::absolute_y ||
+              instruction.mode == AddressMode::indirect_indexed));
         if ((instruction.page_cycle && page_crossed_) || indexed_store || indexed_mutation) {
             (void)read(dummy_address_);
         }
@@ -212,6 +228,57 @@ const std::array<Cpu::Instruction, 256>& Cpu::instruction_table() {
         for (const auto opcode : {0x80, 0x82, 0x89, 0xC2, 0xE2}) {
             set(static_cast<std::uint8_t>(opcode), "NOP", O::nop, M::immediate, 2);
         }
+        for (const auto opcode : {0x04, 0x44, 0x64}) {
+            set(static_cast<std::uint8_t>(opcode), "NOP", O::nop, M::zero_page, 3);
+        }
+        for (const auto opcode : {0x14, 0x34, 0x54, 0x74, 0xD4, 0xF4}) {
+            set(static_cast<std::uint8_t>(opcode), "NOP", O::nop, M::zero_page_x, 4);
+        }
+        set(0x0C, "NOP", O::nop, M::absolute, 4);
+        for (const auto opcode : {0x1C, 0x3C, 0x5C, 0x7C, 0xDC, 0xFC}) {
+            set(static_cast<std::uint8_t>(opcode), "NOP", O::nop, M::absolute_x, 4, true);
+        }
+
+        const auto set_mutation_family = [&set](const char* name, O operation,
+                                                std::uint8_t base) {
+            set(static_cast<std::uint8_t>(base + 0x03U), name, operation, M::indexed_indirect, 8);
+            set(static_cast<std::uint8_t>(base + 0x07U), name, operation, M::zero_page, 5);
+            set(static_cast<std::uint8_t>(base + 0x0FU), name, operation, M::absolute, 6);
+            set(static_cast<std::uint8_t>(base + 0x13U), name, operation, M::indirect_indexed, 8);
+            set(static_cast<std::uint8_t>(base + 0x17U), name, operation, M::zero_page_x, 6);
+            set(static_cast<std::uint8_t>(base + 0x1BU), name, operation, M::absolute_y, 7);
+            set(static_cast<std::uint8_t>(base + 0x1FU), name, operation, M::absolute_x, 7);
+        };
+        set_mutation_family("SLO", O::slo, 0x00);
+        set_mutation_family("RLA", O::rla, 0x20);
+        set_mutation_family("SRE", O::sre, 0x40);
+        set_mutation_family("RRA", O::rra, 0x60);
+        set_mutation_family("DCP", O::dcp, 0xC0);
+        set_mutation_family("ISC", O::isc, 0xE0);
+
+        set(0x83, "SAX", O::sax, M::indexed_indirect, 6);
+        set(0x87, "SAX", O::sax, M::zero_page, 3);
+        set(0x8F, "SAX", O::sax, M::absolute, 4);
+        set(0x97, "SAX", O::sax, M::zero_page_y, 4);
+        set(0x93, "AHX", O::ahx, M::indirect_indexed, 6);
+        set(0x9F, "AHX", O::ahx, M::absolute_y, 5);
+        set(0x9B, "TAS", O::tas, M::absolute_y, 5);
+        set(0x9C, "SHY", O::shy, M::absolute_x, 5);
+        set(0x9E, "SHX", O::shx, M::absolute_y, 5);
+        set(0xA3, "LAX", O::lax, M::indexed_indirect, 6);
+        set(0xA7, "LAX", O::lax, M::zero_page, 3);
+        set(0xAF, "LAX", O::lax, M::absolute, 4);
+        set(0xB3, "LAX", O::lax, M::indirect_indexed, 5, true);
+        set(0xB7, "LAX", O::lax, M::zero_page_y, 4);
+        set(0xBF, "LAX", O::lax, M::absolute_y, 4, true);
+        set(0xBB, "LAS", O::las, M::absolute_y, 4, true);
+        set(0x0B, "ANC", O::anc, M::immediate, 2);
+        set(0x2B, "ANC", O::anc, M::immediate, 2);
+        set(0x4B, "ALR", O::alr, M::immediate, 2);
+        set(0x6B, "ARR", O::arr, M::immediate, 2);
+        set(0xAB, "ATX", O::atx, M::immediate, 2);
+        set(0xCB, "AXS", O::axs, M::immediate, 2);
+        set(0xEB, "SBC", O::sbc, M::immediate, 2);
 
         return result;
     }();
@@ -424,6 +491,44 @@ void Cpu::execute(Operation operation) {
         set_flag(negative, (value & 0x80U) != 0);
         break;
     }
+    case Operation::nop:
+        if (current_mode_ != AddressMode::implied) {
+            (void)operand();
+        }
+        break;
+    case Operation::anc:
+        state_.a = static_cast<std::uint8_t>(state_.a & operand());
+        set_zero_negative(state_.a);
+        set_flag(carry, flag(negative));
+        break;
+    case Operation::alr:
+        state_.a = static_cast<std::uint8_t>(state_.a & operand());
+        set_flag(carry, (state_.a & 0x01U) != 0U);
+        state_.a = static_cast<std::uint8_t>(state_.a >> 1U);
+        set_zero_negative(state_.a);
+        break;
+    case Operation::arr: {
+        const auto combined = static_cast<std::uint8_t>(state_.a & operand());
+        state_.a = static_cast<std::uint8_t>(
+            (combined >> 1U) | (flag(carry) ? 0x80U : 0U));
+        set_zero_negative(state_.a);
+        set_flag(carry, (state_.a & 0x40U) != 0U);
+        set_flag(overflow, ((state_.a >> 6U) ^ (state_.a >> 5U)) & 0x01U);
+        break;
+    }
+    case Operation::atx:
+        state_.a = operand();
+        state_.x = state_.a;
+        set_zero_negative(state_.a);
+        break;
+    case Operation::axs: {
+        const auto value = operand();
+        const auto left = static_cast<std::uint8_t>(state_.a & state_.x);
+        state_.x = static_cast<std::uint8_t>(left - value);
+        set_flag(carry, left >= value);
+        set_zero_negative(state_.x);
+        break;
+    }
     case Operation::asl: {
         const auto value = operand();
         set_flag(carry, (value & 0x80U) != 0);
@@ -482,6 +587,17 @@ void Cpu::execute(Operation operation) {
         state_.y = operand();
         set_zero_negative(state_.y);
         break;
+    case Operation::lax:
+        state_.a = operand();
+        state_.x = state_.a;
+        set_zero_negative(state_.a);
+        break;
+    case Operation::las:
+        state_.a = static_cast<std::uint8_t>(operand() & state_.stack_pointer);
+        state_.x = state_.a;
+        state_.stack_pointer = state_.a;
+        set_zero_negative(state_.a);
+        break;
     case Operation::sta:
         write(address_, state_.a);
         break;
@@ -491,6 +607,36 @@ void Cpu::execute(Operation operation) {
     case Operation::sty:
         write(address_, state_.y);
         break;
+    case Operation::sax:
+        write(address_, static_cast<std::uint8_t>(state_.a & state_.x));
+        break;
+    case Operation::ahx:
+    case Operation::tas: {
+        auto source = static_cast<std::uint8_t>(state_.a & state_.x);
+        if (operation == Operation::tas) {
+            state_.stack_pointer = source;
+        }
+        const auto high_plus_one = static_cast<std::uint8_t>((dummy_address_ >> 8U) + 1U);
+        const auto value = static_cast<std::uint8_t>(source & high_plus_one);
+        const auto destination = page_crossed_
+            ? static_cast<std::uint16_t>((static_cast<std::uint16_t>(value) << 8U) |
+                                         (address_ & 0x00FFU))
+            : address_;
+        write(destination, value);
+        break;
+    }
+    case Operation::shx:
+    case Operation::shy: {
+        const auto source = operation == Operation::shx ? state_.x : state_.y;
+        const auto high_plus_one = static_cast<std::uint8_t>((dummy_address_ >> 8U) + 1U);
+        const auto value = static_cast<std::uint8_t>(source & high_plus_one);
+        const auto destination = page_crossed_
+            ? static_cast<std::uint16_t>((static_cast<std::uint16_t>(value) << 8U) |
+                                         (address_ & 0x00FFU))
+            : address_;
+        write(destination, value);
+        break;
+    }
     case Operation::tax:
         state_.x = state_.a;
         set_zero_negative(state_.x);
@@ -526,6 +672,72 @@ void Cpu::execute(Operation operation) {
         const auto value = static_cast<std::uint8_t>(original - 1U);
         store_mutation(original, value);
         set_zero_negative(value);
+        break;
+    }
+    case Operation::slo: {
+        const auto original = operand();
+        set_flag(carry, (original & 0x80U) != 0U);
+        const auto value = static_cast<std::uint8_t>(original << 1U);
+        store_mutation(original, value);
+        state_.a = static_cast<std::uint8_t>(state_.a | value);
+        set_zero_negative(state_.a);
+        break;
+    }
+    case Operation::rla: {
+        const auto original = operand();
+        const auto previous_carry = flag(carry) ? 1U : 0U;
+        set_flag(carry, (original & 0x80U) != 0U);
+        const auto value = static_cast<std::uint8_t>((original << 1U) | previous_carry);
+        store_mutation(original, value);
+        state_.a = static_cast<std::uint8_t>(state_.a & value);
+        set_zero_negative(state_.a);
+        break;
+    }
+    case Operation::sre: {
+        const auto original = operand();
+        set_flag(carry, (original & 0x01U) != 0U);
+        const auto value = static_cast<std::uint8_t>(original >> 1U);
+        store_mutation(original, value);
+        state_.a = static_cast<std::uint8_t>(state_.a ^ value);
+        set_zero_negative(state_.a);
+        break;
+    }
+    case Operation::rra: {
+        const auto original = operand();
+        const auto previous_carry = flag(carry) ? 0x80U : 0U;
+        set_flag(carry, (original & 0x01U) != 0U);
+        const auto value = static_cast<std::uint8_t>((original >> 1U) | previous_carry);
+        store_mutation(original, value);
+        const auto sum = static_cast<std::uint16_t>(state_.a) + value +
+            (flag(carry) ? 1U : 0U);
+        const auto result = static_cast<std::uint8_t>(sum & 0xFFU);
+        set_flag(carry, sum > 0xFFU);
+        set_flag(overflow, ((~(state_.a ^ value) & (state_.a ^ result)) & 0x80U) != 0U);
+        state_.a = result;
+        set_zero_negative(state_.a);
+        break;
+    }
+    case Operation::dcp: {
+        const auto original = operand();
+        const auto value = static_cast<std::uint8_t>(original - 1U);
+        store_mutation(original, value);
+        const auto difference = static_cast<std::uint8_t>(state_.a - value);
+        set_flag(carry, state_.a >= value);
+        set_zero_negative(difference);
+        break;
+    }
+    case Operation::isc: {
+        const auto original = operand();
+        const auto value = static_cast<std::uint8_t>(original + 1U);
+        store_mutation(original, value);
+        const auto inverted = static_cast<std::uint16_t>(value ^ 0xFFU);
+        const auto sum = static_cast<std::uint16_t>(state_.a) + inverted +
+            (flag(carry) ? 1U : 0U);
+        const auto result = static_cast<std::uint8_t>(sum & 0xFFU);
+        set_flag(carry, (sum & 0xFF00U) != 0U);
+        set_flag(overflow, (((state_.a ^ result) & (state_.a ^ value)) & 0x80U) != 0U);
+        state_.a = result;
+        set_zero_negative(state_.a);
         break;
     }
     case Operation::inx:

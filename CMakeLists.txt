@@ -64,6 +64,7 @@ if(NES_BUILD_TESTS)
         tests/cpu_alu_tests.cpp
         tests/cpu_mutation_tests.cpp
         tests/cpu_control_tests.cpp
+        tests/cpu_unofficial_tests.cpp
         tests/cartridge_tests.cpp
         tests/bus_tests.cpp
         tests/ppu_memory_tests.cpp
