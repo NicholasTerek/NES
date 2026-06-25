@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <iomanip>
 #include <iostream>
 #include <limits>
 #include <stdexcept>
@@ -124,6 +125,15 @@ int run(const Options& options) {
             }
         }
     }
+    const auto& state = emulator.bus().cpu().state();
+    std::cerr << std::hex << std::uppercase << std::setfill('0')
+              << "CPU PC=$" << std::setw(4) << state.program_counter
+              << " A=$" << std::setw(2) << static_cast<unsigned>(state.a)
+              << " X=$" << std::setw(2) << static_cast<unsigned>(state.x)
+              << " Y=$" << std::setw(2) << static_cast<unsigned>(state.y)
+              << " P=$" << std::setw(2) << static_cast<unsigned>(state.status)
+              << " SP=$" << std::setw(2) << static_cast<unsigned>(state.stack_pointer)
+              << std::dec << " cycles=" << state.cycles << '\n';
     return 2;
 }
 
