@@ -32,6 +32,11 @@ void validate_mapper_layout(std::uint8_t mapper_id,
             throw std::invalid_argument("NROM image has an unsupported ROM layout");
         }
         break;
+    case 1:
+        if (program_banks > 16U || character_banks > 16U) {
+            throw std::invalid_argument("MMC1 image has an unsupported ROM layout");
+        }
+        break;
     case 2:
         if (program_banks < 2U || character_banks != 0U) {
             throw std::invalid_argument("UxROM image has an unsupported ROM layout");
@@ -120,6 +125,9 @@ std::shared_ptr<Cartridge> Cartridge::from_ines(std::span<const std::uint8_t> im
     case 0:
         cartridge->mapper_ = std::make_unique<Mapper0>(program_banks, character_banks);
         break;
+    case 1:
+        cartridge->mapper_ = std::make_unique<Mapper1>(program_banks, character_banks);
+        break;
     case 2:
         cartridge->mapper_ = std::make_unique<Mapper2>(program_banks, character_banks);
         break;
@@ -132,6 +140,9 @@ std::shared_ptr<Cartridge> Cartridge::from_ines(std::span<const std::uint8_t> im
 
 bool Cartridge::cpu_read(std::uint16_t address, std::uint8_t& value) {
     if (address >= program_ram_start && address <= program_ram_end) {
+        if (!mapper_->program_ram_enabled()) {
+            return false;
+        }
         value = program_ram_[address - program_ram_start];
         return true;
     }
@@ -146,6 +157,9 @@ bool Cartridge::cpu_read(std::uint16_t address, std::uint8_t& value) {
 
 bool Cartridge::cpu_write(std::uint16_t address, std::uint8_t value) {
     if (address >= program_ram_start && address <= program_ram_end) {
+        if (!mapper_->program_ram_enabled()) {
+            return false;
+        }
         program_ram_[address - program_ram_start] = value;
         return true;
     }
@@ -185,6 +199,9 @@ void Cartridge::reset() {
 }
 
 Mirror Cartridge::mirror() const noexcept {
+    if (const auto mapped = mapper_->mirror()) {
+        return *mapped;
+    }
     return mirror_;
 }
 

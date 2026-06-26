@@ -10,14 +10,6 @@
 
 namespace nes {
 
-enum class Mirror {
-    horizontal,
-    vertical,
-    four_screen,
-    one_screen_low,
-    one_screen_high,
-};
-
 class Cartridge {
 public:
     static std::shared_ptr<Cartridge> load(const std::filesystem::path& path);

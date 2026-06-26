@@ -1,10 +1,13 @@
 #include "nes/cartridge.hpp"
 #include "nes/mapper.hpp"
 
+#include <algorithm>
+#include <cstddef>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
 #include <string_view>
 #include <vector>
@@ -97,6 +100,28 @@ std::vector<std::uint8_t> ines_image(std::uint8_t program_banks,
     image[6] = flags6;
     image[8] = program_ram_banks;
     return image;
+}
+
+std::shared_ptr<nes::Cartridge> mmc1_cartridge() {
+    constexpr std::size_t header = 16;
+    constexpr std::size_t program_bank = 16U * 1024U;
+    constexpr std::size_t character_bank = 4U * 1024U;
+    auto image = ines_image(4, 2, 0x10);
+    for (std::size_t bank = 0; bank < 4; ++bank) {
+        std::fill_n(image.begin() + static_cast<std::ptrdiff_t>(header + bank * program_bank),
+                    program_bank, static_cast<std::uint8_t>(0x10U * (bank + 1U)));
+        std::fill_n(image.begin() + static_cast<std::ptrdiff_t>(
+                        header + 4U * program_bank + bank * character_bank),
+                    character_bank, static_cast<std::uint8_t>(bank + 1U));
+    }
+    return nes::Cartridge::from_ines(image);
+}
+
+void mmc1_write(nes::Cartridge& cartridge, std::uint16_t address, std::uint8_t value) {
+    for (std::uint8_t bit = 0; bit < 5; ++bit) {
+        expect(cartridge.cpu_write(address, static_cast<std::uint8_t>((value >> bit) & 1U)),
+               "MMC1 serial register accepts each configuration bit");
+    }
 }
 
 void cartridge_parses_ines_and_routes_accesses() {
@@ -236,7 +261,7 @@ void cartridge_rejects_invalid_images() {
     unknown_format[7] = 0x04;
     expect_invalid_image(unknown_format, "reserved header formats are rejected");
 
-    auto unsupported = ines_image(1, 1, 0x10);
+    auto unsupported = ines_image(1, 1, 0xF0);
     expect_invalid_image(unsupported, "unsupported mappers fail explicitly");
 
     expect_invalid_image(ines_image(3, 1), "NROM rejects oversized program ROM");
@@ -271,6 +296,65 @@ void uxrom_switches_lower_program_bank() {
            "UxROM reset returns to bank zero");
 }
 
+void mmc1_switches_program_banks_in_each_mode() {
+    auto cartridge = mmc1_cartridge();
+    std::uint8_t value = 0;
+    expect(cartridge->mapper_id() == 1, "iNES mapper one selects MMC1");
+    expect(cartridge->cpu_read(0x8000, value) && value == 0x10,
+           "MMC1 initially maps selected bank zero at $8000");
+    expect(cartridge->cpu_read(0xC000, value) && value == 0x40,
+           "MMC1 initially fixes the final program bank at $C000");
+
+    mmc1_write(*cartridge, 0xE000, 0x02);
+    expect(cartridge->cpu_read(0x8000, value) && value == 0x30,
+           "MMC1 mode three switches the lower 16 KiB bank");
+    mmc1_write(*cartridge, 0x8000, 0x08);
+    expect(cartridge->cpu_read(0x8000, value) && value == 0x10,
+           "MMC1 mode two fixes the first bank at $8000");
+    expect(cartridge->cpu_read(0xC000, value) && value == 0x30,
+           "MMC1 mode two switches the upper 16 KiB bank");
+    mmc1_write(*cartridge, 0x8000, 0x00);
+    expect(cartridge->cpu_read(0x8000, value) && value == 0x30,
+           "MMC1 32 KiB mode selects an even bank pair");
+    expect(cartridge->cpu_read(0xC000, value) && value == 0x40,
+           "MMC1 32 KiB mode exposes the second bank in the selected pair");
+}
+
+void mmc1_switches_character_banks_and_mirroring() {
+    auto cartridge = mmc1_cartridge();
+    std::uint8_t value = 0;
+    mmc1_write(*cartridge, 0x8000, 0x1C);
+    mmc1_write(*cartridge, 0xA000, 0x01);
+    mmc1_write(*cartridge, 0xC000, 0x02);
+    expect(cartridge->ppu_read(0x0000, value) && value == 0x02,
+           "MMC1 selects an independent lower 4 KiB CHR bank");
+    expect(cartridge->ppu_read(0x1000, value) && value == 0x03,
+           "MMC1 selects an independent upper 4 KiB CHR bank");
+    expect(cartridge->mirror() == nes::Mirror::one_screen_low,
+           "MMC1 control selects lower one-screen mirroring");
+    mmc1_write(*cartridge, 0x8000, 0x1D);
+    expect(cartridge->mirror() == nes::Mirror::one_screen_high,
+           "MMC1 control selects upper one-screen mirroring");
+    mmc1_write(*cartridge, 0x8000, 0x1E);
+    expect(cartridge->mirror() == nes::Mirror::vertical,
+           "MMC1 control selects vertical mirroring");
+    mmc1_write(*cartridge, 0x8000, 0x1F);
+    expect(cartridge->mirror() == nes::Mirror::horizontal,
+           "MMC1 control selects horizontal mirroring");
+}
+
+void mmc1_controls_program_ram_access() {
+    auto cartridge = mmc1_cartridge();
+    std::uint8_t value = 0;
+    expect(cartridge->cpu_write(0x6000, 0x5A), "MMC1 program RAM starts enabled");
+    mmc1_write(*cartridge, 0xE000, 0x10);
+    expect(!cartridge->cpu_read(0x6000, value), "MMC1 can disable program RAM reads");
+    expect(!cartridge->cpu_write(0x6000, 0xA5), "MMC1 can disable program RAM writes");
+    mmc1_write(*cartridge, 0xE000, 0x00);
+    expect(cartridge->cpu_read(0x6000, value) && value == 0x5A,
+           "re-enabled MMC1 program RAM preserves its contents");
+}
+
 }  // namespace
 
 int run_cartridge_tests() {
@@ -287,5 +371,8 @@ int run_cartridge_tests() {
     cartridge_reports_missing_files();
     cartridge_rejects_invalid_images();
     uxrom_switches_lower_program_bank();
+    mmc1_switches_program_banks_in_each_mode();
+    mmc1_switches_character_banks_and_mirroring();
+    mmc1_controls_program_ram_access();
     return failures;
 }
