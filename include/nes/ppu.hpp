@@ -79,6 +79,8 @@ private:
     [[nodiscard]] std::size_t nametable_index(std::uint16_t address) const;
     [[nodiscard]] static std::size_t palette_index(std::uint16_t address);
     [[nodiscard]] bool rendering_enabled() const noexcept;
+    void drive_open_bus(std::uint8_t value, std::uint8_t mask) noexcept;
+    void decay_open_bus() noexcept;
     void fetch_background_data();
     void load_background_shifters();
     void update_background_shifters();
@@ -112,6 +114,7 @@ private:
     bool write_latch_ = false;
     std::uint8_t data_buffer_ = 0;
     std::uint8_t open_bus_ = 0;
+    std::array<std::uint32_t, 8> open_bus_decay_{};
     std::uint8_t oam_address_ = 0;
     std::int16_t scanline_ = -1;
     std::int16_t cycle_ = 0;

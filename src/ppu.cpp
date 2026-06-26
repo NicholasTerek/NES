@@ -19,6 +19,7 @@ constexpr std::uint8_t mask_render_sprites = 0x10;
 constexpr std::uint8_t status_vertical_blank = 0x80;
 constexpr std::uint8_t status_sprite_overflow = 0x20;
 constexpr std::uint8_t status_sprite_zero_hit = 0x40;
+constexpr std::uint32_t open_bus_decay_clocks = 3'000'000;
 
 }  // namespace
 
@@ -55,19 +56,24 @@ std::uint8_t Ppu::cpu_read(std::uint16_t address, bool read_only) {
         value = static_cast<std::uint8_t>((status_ & 0xE0U) | (open_bus_ & 0x1FU));
         status_ = static_cast<std::uint8_t>(status_ & ~status_vertical_blank);
         write_latch_ = false;
+        drive_open_bus(value, 0xE0U);
         break;
     case 4:
-        value = oam_[oam_address_];
+        value = static_cast<std::uint8_t>(
+            oam_[oam_address_] & ((oam_address_ & 0x03U) == 0x02U ? 0xE3U : 0xFFU));
+        drive_open_bus(value, 0xFFU);
         break;
     case 7: {
         const auto address_before_increment = vram_address_;
         const auto fetched = ppu_read(address_before_increment);
         if ((address_before_increment & 0x3FFFU) >= 0x3F00U) {
-            value = fetched;
+            value = static_cast<std::uint8_t>((open_bus_ & 0xC0U) | (fetched & 0x3FU));
             data_buffer_ = ppu_read(static_cast<std::uint16_t>(address_before_increment - 0x1000U));
+            drive_open_bus(value, 0x3FU);
         } else {
             value = data_buffer_;
             data_buffer_ = fetched;
+            drive_open_bus(value, 0xFFU);
         }
         vram_address_ = static_cast<std::uint16_t>(
             (vram_address_ + ((control_ & control_increment_mode) != 0U ? 32U : 1U)) &
@@ -77,12 +83,11 @@ std::uint8_t Ppu::cpu_read(std::uint16_t address, bool read_only) {
     default:
         break;
     }
-    open_bus_ = value;
     return value;
 }
 
 void Ppu::cpu_write(std::uint16_t address, std::uint8_t value) {
-    open_bus_ = value;
+    drive_open_bus(value, 0xFFU);
     switch (address & 0x0007U) {
     case 0:
         if ((control_ & control_enable_nmi) == 0U && (value & control_enable_nmi) != 0U &&
@@ -179,6 +184,7 @@ void Ppu::ppu_write(std::uint16_t address, std::uint8_t value) {
 }
 
 void Ppu::clock() {
+    decay_open_bus();
     if (scanline_ == -1 && cycle_ == 1) {
         status_ = static_cast<std::uint8_t>(
             status_ & ~(status_vertical_blank | status_sprite_overflow | status_sprite_zero_hit));
@@ -260,6 +266,7 @@ void Ppu::reset() {
     write_latch_ = false;
     data_buffer_ = 0;
     open_bus_ = 0;
+    open_bus_decay_.fill(0);
     oam_address_ = 0;
     scanline_ = -1;
     cycle_ = 0;
@@ -348,6 +355,30 @@ std::uint8_t Ppu::pixel(std::size_t x, std::size_t y) const {
 
 bool Ppu::rendering_enabled() const noexcept {
     return (mask_ & (mask_render_background | mask_render_sprites)) != 0U;
+}
+
+void Ppu::drive_open_bus(std::uint8_t value, std::uint8_t mask) noexcept {
+    open_bus_ = static_cast<std::uint8_t>((open_bus_ & ~mask) | (value & mask));
+    for (std::uint8_t bit = 0; bit < 8U; ++bit) {
+        const auto bit_mask = static_cast<std::uint8_t>(1U << bit);
+        if ((mask & bit_mask) != 0U) {
+            open_bus_decay_[bit] = open_bus_decay_clocks;
+        }
+    }
+}
+
+void Ppu::decay_open_bus() noexcept {
+    for (std::uint8_t bit = 0; bit < 8U; ++bit) {
+        auto& remaining = open_bus_decay_[bit];
+        if (remaining == 0U) {
+            continue;
+        }
+        --remaining;
+        if (remaining == 0U) {
+            open_bus_ = static_cast<std::uint8_t>(
+                open_bus_ & ~static_cast<std::uint8_t>(1U << bit));
+        }
+    }
 }
 
 void Ppu::fetch_background_data() {

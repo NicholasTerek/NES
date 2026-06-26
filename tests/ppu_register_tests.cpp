@@ -88,6 +88,31 @@ void grayscale_mode_masks_palette_output() {
     expect(ppu.ppu_read(0x3F00) == 0x20, "grayscale mode retains only luminance bits");
 }
 
+void open_bus_tracks_driven_bits_and_decays() {
+    nes::Ppu ppu;
+    ppu.cpu_write(0x2006, 0x3F);
+    ppu.cpu_write(0x2006, 0x00);
+    ppu.ppu_write(0x3F00, 0x15);
+    ppu.cpu_write(0x2002, 0xC0);
+    expect(ppu.cpu_read(0x2007) == 0xD5,
+           "palette reads retain the open-bus high bits");
+    expect(ppu.cpu_read(0x2000) == 0xD5,
+           "palette reads refresh only the six driven low bits");
+
+    ppu.cpu_write(0x2003, 0x02);
+    ppu.cpu_write(0x2004, 0xFF);
+    ppu.cpu_write(0x2003, 0x02);
+    expect(ppu.cpu_read(0x2004) == 0xE3,
+           "OAM attribute reads force unused bits low");
+
+    ppu.cpu_write(0x2000, 0xFF);
+    for (std::uint32_t clock = 0; clock < 3'000'000U; ++clock) {
+        ppu.clock();
+    }
+    expect(ppu.cpu_read(0x2000) == 0,
+           "undriven PPU open-bus bits decay within one second");
+}
+
 }  // namespace
 
 int run_ppu_register_tests() {
@@ -98,5 +123,6 @@ int run_ppu_register_tests() {
     data_reads_use_the_internal_buffer();
     status_reads_reset_the_shared_write_latch();
     grayscale_mode_masks_palette_output();
+    open_bus_tracks_driven_bits_and_decays();
     return nes::test::failures - before;
 }
