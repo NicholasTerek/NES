@@ -12,10 +12,17 @@ void Cpu::reset() {
     state_.status = unused | interrupt_disable;
     state_.program_counter = read_word(0xFFFC);
     remaining_cycles_ = 8;
+    interrupt_disable_sampled_ = true;
 }
 
 void Cpu::irq() {
     if (!flag(interrupt_disable)) {
+        service_interrupt(0xFFFE, 7);
+    }
+}
+
+void Cpu::poll_irq() {
+    if (!interrupt_disable_sampled_) {
         service_interrupt(0xFFFE, 7);
     }
 }
@@ -30,6 +37,7 @@ void Cpu::clock() {
         const auto& instruction = instruction_table()[opcode_];
         remaining_cycles_ = instruction.cycles;
         current_mode_ = instruction.mode;
+        interrupt_disable_sampled_ = flag(interrupt_disable);
         resolve_address(instruction.mode);
         const bool indexed_store =
             (instruction.operation == Operation::sta ||
@@ -125,8 +133,9 @@ void Cpu::service_interrupt(std::uint16_t vector, std::uint8_t cycles) {
     push(static_cast<std::uint8_t>(state_.program_counter & 0xFFU));
     set_flag(break_command, false);
     set_flag(unused, true);
-    set_flag(interrupt_disable, true);
     push(state_.status);
+    set_flag(interrupt_disable, true);
+    interrupt_disable_sampled_ = true;
     state_.program_counter = read_word(vector);
     remaining_cycles_ = cycles;
 }
@@ -278,6 +287,7 @@ const std::array<Cpu::Instruction, 256>& Cpu::instruction_table() {
         set(0x6B, "ARR", O::arr, M::immediate, 2);
         set(0xAB, "ATX", O::atx, M::immediate, 2);
         set(0xCB, "AXS", O::axs, M::immediate, 2);
+        set(0x8B, "XAA", O::xaa, M::immediate, 2);
         set(0xEB, "SBC", O::sbc, M::immediate, 2);
 
         return result;
@@ -431,6 +441,7 @@ void Cpu::execute(Operation operation) {
         state_.status = pop();
         set_flag(break_command, false);
         set_flag(unused, true);
+        interrupt_disable_sampled_ = flag(interrupt_disable);
         const auto low = static_cast<std::uint16_t>(pop());
         const auto high = static_cast<std::uint16_t>(pop());
         state_.program_counter = static_cast<std::uint16_t>((high << 8U) | low);
@@ -529,6 +540,10 @@ void Cpu::execute(Operation operation) {
         set_zero_negative(state_.x);
         break;
     }
+    case Operation::xaa:
+        state_.a = static_cast<std::uint8_t>(state_.x & operand());
+        set_zero_negative(state_.a);
+        break;
     case Operation::asl: {
         const auto value = operand();
         set_flag(carry, (value & 0x80U) != 0);

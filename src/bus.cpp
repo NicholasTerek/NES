@@ -79,7 +79,7 @@ void Bus::clock() {
                         nmi_pending_ = false;
                     }
                 } else if (apu_.irq_pending()) {
-                    cpu_.irq();
+                    cpu_.poll_irq();
                 }
             }
             cpu_.clock();

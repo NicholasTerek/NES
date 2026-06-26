@@ -36,6 +36,7 @@ public:
 
     void reset();
     void irq();
+    void poll_irq();
     void nmi();
     void clock();
 
@@ -70,7 +71,7 @@ private:
         rol, ror, rti, rts, sbc, sec, sed, sei, sta, stx, sty, tax, tay,
         tsx, txa, txs, tya,
         ahx, alr, anc, arr, atx, axs, dcp, isc, las, lax, rla, rra, sax, shx,
-        shy, slo, sre, tas,
+        shy, slo, sre, tas, xaa,
         illegal,
     };
 
@@ -90,6 +91,7 @@ private:
     std::uint16_t dummy_address_ = 0;
     std::int8_t relative_ = 0;
     bool page_crossed_ = false;
+    bool interrupt_disable_sampled_ = true;
     AddressMode current_mode_ = AddressMode::implied;
 
     [[nodiscard]] static const std::array<Instruction, 256>& instruction_table();
