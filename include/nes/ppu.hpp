@@ -117,6 +117,7 @@ private:
     std::int16_t cycle_ = 0;
     bool frame_complete_ = false;
     bool odd_frame_ = false;
+    bool odd_frame_skip_armed_ = false;
     bool nmi_pending_ = false;
     bool nmi_instruction_delay_ = false;
     bool suppress_vertical_blank_ = false;

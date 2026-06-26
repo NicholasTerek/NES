@@ -84,6 +84,19 @@ void disabled_rendering_keeps_full_length_frames() {
            "disabled odd frame does not apply the rendering cycle skip");
 }
 
+void odd_frame_skip_latches_rendering_before_the_final_dot() {
+    nes::Ppu ppu;
+    expect(clocks_to_frame(ppu) == 341U * 262U,
+           "disabled even frame establishes odd parity");
+    ppu.clear_frame_complete();
+    clock_until(ppu, -1, 338);
+    ppu.clock();
+    ppu.cpu_write(0x2001, 0x08);
+    ppu.clock();
+    expect(ppu.state().scanline == -1 && ppu.state().cycle == 340,
+           "rendering enabled after the skip sample does not shorten the odd frame");
+}
+
 void status_reads_acknowledge_vertical_blank() {
     nes::Ppu ppu;
     clock_until(ppu, 241, 1);
@@ -185,6 +198,7 @@ int run_ppu_timing_tests() {
     vertical_blank_tracks_the_timing_window();
     odd_rendering_frames_skip_one_ppu_clock();
     disabled_rendering_keeps_full_length_frames();
+    odd_frame_skip_latches_rendering_before_the_final_dot();
     status_reads_acknowledge_vertical_blank();
     status_reads_at_the_vblank_edge_suppress_the_flag();
     system_clock_runs_the_ppu_three_times_faster();

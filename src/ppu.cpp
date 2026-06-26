@@ -228,7 +228,11 @@ void Ppu::clock() {
         render_pixel();
     }
 
-    if (scanline_ == -1 && cycle_ == 339 && odd_frame_ && rendering_enabled()) {
+    if (scanline_ == -1 && cycle_ == 338) {
+        odd_frame_skip_armed_ = odd_frame_ && rendering_enabled();
+    }
+    if (scanline_ == -1 && cycle_ == 339 && odd_frame_skip_armed_) {
+        odd_frame_skip_armed_ = false;
         cycle_ = 0;
         scanline_ = 0;
         return;
@@ -261,6 +265,7 @@ void Ppu::reset() {
     cycle_ = 0;
     frame_complete_ = false;
     odd_frame_ = false;
+    odd_frame_skip_armed_ = false;
     nmi_pending_ = false;
     nmi_instruction_delay_ = false;
     suppress_vertical_blank_ = false;
