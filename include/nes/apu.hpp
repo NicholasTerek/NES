@@ -3,12 +3,17 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <deque>
 #include <functional>
+#include <optional>
 
 namespace nes {
 
 class Apu {
 public:
+    static constexpr std::uint32_t cpu_frequency = 1'789'773;
+    static constexpr std::uint32_t output_sample_rate = 44'100;
+
     struct State {
         std::uint64_t cpu_cycle = 0;
         std::uint32_t frame_cycle = 0;
@@ -41,6 +46,10 @@ public:
     void cpu_write(std::uint16_t address, std::uint8_t value) noexcept;
     void set_dmc_reader(std::function<std::uint8_t(std::uint16_t)> reader);
     [[nodiscard]] std::uint8_t take_cpu_stall_cycles() noexcept;
+    [[nodiscard]] float mixed_output() const noexcept;
+    [[nodiscard]] std::size_t buffered_samples() const noexcept;
+    [[nodiscard]] std::optional<float> pop_sample() noexcept;
+    void clear_samples() noexcept;
 
     [[nodiscard]] bool irq_pending() const noexcept;
     [[nodiscard]] State state() const noexcept;
@@ -125,6 +134,7 @@ private:
     void clock_noise_envelope() noexcept;
     void clock_dmc() noexcept;
     void restart_dmc_sample() noexcept;
+    void queue_output_sample() noexcept;
     [[nodiscard]] std::uint8_t pulse_level(std::size_t index) const noexcept;
     [[nodiscard]] std::uint8_t triangle_level() const noexcept;
     [[nodiscard]] std::uint8_t noise_level() const noexcept;
@@ -144,6 +154,8 @@ private:
     Dmc dmc_{};
     std::function<std::uint8_t(std::uint16_t)> dmc_reader_;
     std::uint8_t pending_cpu_stall_ = 0;
+    std::uint32_t sample_phase_ = 0;
+    std::deque<float> samples_;
 };
 
 }  // namespace nes

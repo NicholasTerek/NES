@@ -52,6 +52,8 @@ void Apu::reset() noexcept {
     dmc_.sample_length = 1;
     dmc_.current_address = 0xC000;
     pending_cpu_stall_ = 0;
+    sample_phase_ = 0;
+    samples_.clear();
 }
 
 void Apu::clock() noexcept {
@@ -86,6 +88,7 @@ void Apu::clock() noexcept {
         default:
             break;
         }
+        queue_output_sample();
         return;
     }
 
@@ -105,6 +108,7 @@ void Apu::clock() noexcept {
     default:
         break;
     }
+    queue_output_sample();
 }
 
 std::uint8_t Apu::cpu_read(std::uint16_t address, bool read_only) noexcept {
@@ -253,6 +257,38 @@ std::uint8_t Apu::take_cpu_stall_cycles() noexcept {
     const auto cycles = pending_cpu_stall_;
     pending_cpu_stall_ = 0;
     return cycles;
+}
+
+float Apu::mixed_output() const noexcept {
+    const auto pulse_sum = static_cast<double>(pulse_level(0)) +
+                           static_cast<double>(pulse_level(1));
+    const auto pulse_mix = pulse_sum == 0.0
+                               ? 0.0
+                               : 95.88 / ((8'128.0 / pulse_sum) + 100.0);
+    const auto tnd_input = static_cast<double>(triangle_level()) / 8'227.0 +
+                           static_cast<double>(noise_level()) / 12'241.0 +
+                           static_cast<double>(dmc_.output_level) / 22'638.0;
+    const auto tnd_mix = tnd_input == 0.0
+                             ? 0.0
+                             : 159.79 / ((1.0 / tnd_input) + 100.0);
+    return static_cast<float>(pulse_mix + tnd_mix);
+}
+
+std::size_t Apu::buffered_samples() const noexcept {
+    return samples_.size();
+}
+
+std::optional<float> Apu::pop_sample() noexcept {
+    if (samples_.empty()) {
+        return std::nullopt;
+    }
+    const auto sample = samples_.front();
+    samples_.pop_front();
+    return sample;
+}
+
+void Apu::clear_samples() noexcept {
+    samples_.clear();
 }
 
 bool Apu::irq_pending() const noexcept {
@@ -522,6 +558,15 @@ void Apu::clock_dmc() noexcept {
 void Apu::restart_dmc_sample() noexcept {
     dmc_.current_address = dmc_.sample_address;
     dmc_.bytes_remaining = dmc_.sample_length;
+}
+
+void Apu::queue_output_sample() noexcept {
+    sample_phase_ = static_cast<std::uint32_t>(sample_phase_ + output_sample_rate);
+    if (sample_phase_ < cpu_frequency) {
+        return;
+    }
+    sample_phase_ = static_cast<std::uint32_t>(sample_phase_ - cpu_frequency);
+    samples_.push_back(mixed_output());
 }
 
 }  // namespace nes

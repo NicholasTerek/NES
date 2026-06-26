@@ -2,6 +2,7 @@
 #include "nes/bus.hpp"
 #include "test_harness.hpp"
 
+#include <cmath>
 #include <cstdint>
 
 namespace {
@@ -227,6 +228,37 @@ void dmc_loop_and_interrupt_controls_follow_status_registers() {
     expect(!looping.state().dmc_irq, "looping DMC playback does not raise an interrupt");
 }
 
+void nonlinear_mixer_combines_active_channels() {
+    nes::Apu apu;
+    apu.cpu_write(0x4011, 0x40);
+    const auto dmc_only = apu.mixed_output();
+    expect(dmc_only > 0.0F && dmc_only < 1.0F,
+           "nonlinear mixer converts DMC level into normalized audio");
+
+    apu.cpu_write(0x4015, 0x01);
+    apu.cpu_write(0x4000, 0x1F);
+    apu.cpu_write(0x4002, 0x08);
+    apu.cpu_write(0x4003, 0xF8);
+    apu.clock();
+    apu.clock();
+    expect(apu.mixed_output() > dmc_only,
+           "pulse output is combined with the triangle-noise-DMC path");
+}
+
+void audio_resampler_buffers_stable_rate_output() {
+    nes::Apu apu;
+    clock_apu(apu, 40'585);
+    expect(apu.buffered_samples() == 1'000,
+           "APU resampler produces 44.1 kHz output from the NTSC CPU clock");
+    const auto first = apu.pop_sample();
+    expect(first.has_value() && std::abs(*first) < 0.0001F,
+           "silent APU channels buffer silent audio samples");
+    expect(apu.buffered_samples() == 999,
+           "popping audio advances the output sample queue");
+    apu.clear_samples();
+    expect(apu.buffered_samples() == 0, "audio sample queue can be drained by a frontend");
+}
+
 }  // namespace
 
 int run_apu_tests() {
@@ -244,5 +276,7 @@ int run_apu_tests() {
     triangle_and_noise_disable_bits_clear_lengths();
     dmc_fetches_samples_and_stalls_the_cpu();
     dmc_loop_and_interrupt_controls_follow_status_registers();
+    nonlinear_mixer_combines_active_channels();
+    audio_resampler_buffers_stable_rate_output();
     return nes::test::failures - before;
 }
