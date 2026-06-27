@@ -187,4 +187,68 @@ std::uint32_t Mapper1::character_address(std::uint16_t address) const noexcept {
     return static_cast<std::uint32_t>(bank) * 0x1000U + (address & 0x0FFFU);
 }
 
+std::optional<std::uint32_t> Mapper3::cpu_read(std::uint16_t address) {
+    if (address < 0x8000U) {
+        return std::nullopt;
+    }
+    return address & (program_banks_ > 1U ? 0x7FFFU : 0x3FFFU);
+}
+
+Mapper::WriteMapping Mapper3::cpu_write(std::uint16_t address, std::uint8_t value) {
+    if (address < 0x8000U) {
+        return {};
+    }
+    character_bank_ = static_cast<std::uint8_t>(value % character_banks_);
+    return {true, std::nullopt};
+}
+
+std::optional<std::uint32_t> Mapper3::ppu_read(std::uint16_t address) {
+    if (address > 0x1FFFU) {
+        return std::nullopt;
+    }
+    return static_cast<std::uint32_t>(character_bank_) * 0x2000U + address;
+}
+
+Mapper::WriteMapping Mapper3::ppu_write(std::uint16_t address) {
+    return {address <= 0x1FFFU, std::nullopt};
+}
+
+void Mapper3::reset() {
+    character_bank_ = 0;
+}
+
+std::optional<std::uint32_t> Mapper66::cpu_read(std::uint16_t address) {
+    if (address < 0x8000U) {
+        return std::nullopt;
+    }
+    return static_cast<std::uint32_t>(program_bank_) * 0x8000U +
+           static_cast<std::uint32_t>(address - 0x8000U);
+}
+
+Mapper::WriteMapping Mapper66::cpu_write(std::uint16_t address, std::uint8_t value) {
+    if (address < 0x8000U) {
+        return {};
+    }
+    const auto program_blocks = static_cast<std::uint8_t>(program_banks_ / 2U);
+    program_bank_ = static_cast<std::uint8_t>(((value >> 4U) & 0x03U) % program_blocks);
+    character_bank_ = static_cast<std::uint8_t>((value & 0x03U) % character_banks_);
+    return {true, std::nullopt};
+}
+
+std::optional<std::uint32_t> Mapper66::ppu_read(std::uint16_t address) {
+    if (address > 0x1FFFU) {
+        return std::nullopt;
+    }
+    return static_cast<std::uint32_t>(character_bank_) * 0x2000U + address;
+}
+
+Mapper::WriteMapping Mapper66::ppu_write(std::uint16_t address) {
+    return {address <= 0x1FFFU, std::nullopt};
+}
+
+void Mapper66::reset() {
+    program_bank_ = 0;
+    character_bank_ = 0;
+}
+
 }  // namespace nes

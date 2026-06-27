@@ -42,6 +42,17 @@ void validate_mapper_layout(std::uint8_t mapper_id,
             throw std::invalid_argument("UxROM image has an unsupported ROM layout");
         }
         break;
+    case 3:
+        if (program_banks > 2U || character_banks == 0U) {
+            throw std::invalid_argument("CNROM image has an unsupported ROM layout");
+        }
+        break;
+    case 66:
+        if (program_banks < 2U || (program_banks & 0x01U) != 0U ||
+            program_banks > 8U || character_banks == 0U || character_banks > 4U) {
+            throw std::invalid_argument("GxROM image has an unsupported ROM layout");
+        }
+        break;
     default:
         throw std::invalid_argument("unsupported mapper " + std::to_string(mapper_id));
     }
@@ -130,6 +141,12 @@ std::shared_ptr<Cartridge> Cartridge::from_ines(std::span<const std::uint8_t> im
         break;
     case 2:
         cartridge->mapper_ = std::make_unique<Mapper2>(program_banks, character_banks);
+        break;
+    case 3:
+        cartridge->mapper_ = std::make_unique<Mapper3>(program_banks, character_banks);
+        break;
+    case 66:
+        cartridge->mapper_ = std::make_unique<Mapper66>(program_banks, character_banks);
         break;
     default:
         throw std::logic_error("validated mapper was not constructed");

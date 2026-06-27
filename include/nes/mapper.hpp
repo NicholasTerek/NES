@@ -90,4 +90,35 @@ private:
     std::uint8_t program_bank_ = 0;
 };
 
+class Mapper3 final : public Mapper {
+public:
+    using Mapper::Mapper;
+
+    [[nodiscard]] std::optional<std::uint32_t> cpu_read(std::uint16_t address) override;
+    [[nodiscard]] WriteMapping cpu_write(std::uint16_t address,
+                                         std::uint8_t value) override;
+    [[nodiscard]] std::optional<std::uint32_t> ppu_read(std::uint16_t address) override;
+    [[nodiscard]] WriteMapping ppu_write(std::uint16_t address) override;
+    void reset() override;
+
+private:
+    std::uint8_t character_bank_ = 0;
+};
+
+class Mapper66 final : public Mapper {
+public:
+    using Mapper::Mapper;
+
+    [[nodiscard]] std::optional<std::uint32_t> cpu_read(std::uint16_t address) override;
+    [[nodiscard]] WriteMapping cpu_write(std::uint16_t address,
+                                         std::uint8_t value) override;
+    [[nodiscard]] std::optional<std::uint32_t> ppu_read(std::uint16_t address) override;
+    [[nodiscard]] WriteMapping ppu_write(std::uint16_t address) override;
+    void reset() override;
+
+private:
+    std::uint8_t program_bank_ = 0;
+    std::uint8_t character_bank_ = 0;
+};
+
 }  // namespace nes
