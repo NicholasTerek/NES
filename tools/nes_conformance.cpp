@@ -78,20 +78,25 @@ std::string read_message(nes::Bus& bus) {
 int run(const Options& options) {
     auto emulator = nes::Emulator::load(options.rom);
     bool signature_seen = false;
-    bool reset_performed = false;
+    std::size_t reset_count = 0;
+    std::size_t reset_cooldown = 0;
 
     for (std::size_t frame = 1; frame <= options.maximum_frames; ++frame) {
         emulator.run_frame();
+        if (reset_cooldown != 0U) {
+            --reset_cooldown;
+        }
         auto& bus = emulator.bus();
         if (!has_blargg_signature(bus)) {
             continue;
         }
         signature_seen = true;
         const auto status = bus.cpu_read(status_address, true);
-        if (status == reset_requested && !reset_performed) {
+        if (status == reset_requested && reset_count < 4U && reset_cooldown == 0U) {
             emulator.run_frames(7);
             emulator.reset();
-            reset_performed = true;
+            ++reset_count;
+            reset_cooldown = 10;
             continue;
         }
         if (status == running || status == reset_requested) {
