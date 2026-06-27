@@ -18,7 +18,7 @@ void clock_apu(nes::Apu& apu, std::uint32_t cycles) {
 void four_step_sequence_clocks_envelopes_and_lengths() {
     nes::Apu apu;
     apu.reset();
-    clock_apu(apu, 29'830);
+    clock_apu(apu, 29'833);
     const auto state = apu.state();
     expect(state.quarter_frame_ticks == 4,
            "four-step APU mode clocks four quarter-frame units");
@@ -63,13 +63,29 @@ void frame_irq_inhibit_clears_and_suppresses_interrupts() {
     expect(!apu.irq_pending(), "frame IRQ inhibit suppresses future interrupts");
 }
 
+void reset_preserves_triangle_control_and_frame_mode() {
+    nes::Apu apu;
+    apu.cpu_write(0x4017, 0x80);
+    clock_apu(apu, 3);
+    apu.cpu_write(0x4008, 0xFF);
+    apu.reset();
+    apu.cpu_write(0x4015, 0x04);
+    apu.cpu_write(0x400B, 0x18);
+    clock_apu(apu, 29'830);
+
+    expect(apu.state().five_step_mode,
+           "reset preserves the last frame-counter mode");
+    expect(apu.state().triangle_length != 0U,
+           "reset preserves triangle length-counter halt control");
+}
+
 void system_bus_clocks_and_maps_the_apu() {
     nes::Bus bus;
     bus.reset();
-    for (std::uint32_t clock = 0; clock < 3U * 7'457U; ++clock) {
+    for (std::uint32_t clock = 0; clock < 3U * 7'460U; ++clock) {
         bus.clock();
     }
-    expect(bus.apu().state().cpu_cycle == 7'457U,
+    expect(bus.apu().state().cpu_cycle == 7'460U,
            "the system bus clocks the APU once per CPU cycle");
     expect(bus.apu().state().quarter_frame_ticks == 1,
            "the connected APU advances its frame sequencer");
@@ -271,6 +287,7 @@ int run_apu_tests() {
     status_reads_report_and_acknowledge_frame_interrupts();
     five_step_sequence_never_raises_a_frame_interrupt();
     frame_irq_inhibit_clears_and_suppresses_interrupts();
+    reset_preserves_triangle_control_and_frame_mode();
     system_bus_clocks_and_maps_the_apu();
     pulse_registers_load_length_and_generate_a_duty_wave();
     half_frames_clock_pulse_length_and_sweep_units();

@@ -34,19 +34,25 @@ constexpr std::array<std::uint16_t, 16> dmc_rate_table{
 }  // namespace
 
 void Apu::reset() noexcept {
+    const auto triangle_control = triangle_.control;
+    const auto triangle_linear_reload = triangle_.linear_reload;
+    const auto frame_mode = five_step_mode_;
+    const auto frame_irq_inhibit = irq_inhibit_;
     cpu_cycle_ = 0;
     frame_cycle_ = 0;
     quarter_frame_ticks_ = 0;
     half_frame_ticks_ = 0;
-    five_step_mode_ = false;
-    irq_inhibit_ = false;
+    five_step_mode_ = frame_mode;
+    irq_inhibit_ = frame_irq_inhibit;
     frame_irq_ = false;
-    frame_write_pending_ = false;
-    pending_five_step_mode_ = false;
-    pending_irq_inhibit_ = false;
-    frame_write_delay_ = 0;
+    frame_write_pending_ = true;
+    pending_five_step_mode_ = frame_mode;
+    pending_irq_inhibit_ = frame_irq_inhibit;
+    frame_write_delay_ = 3;
     pulse_ = {};
     triangle_ = {};
+    triangle_.control = triangle_control;
+    triangle_.linear_reload = triangle_linear_reload;
     noise_ = {};
     noise_.shift_register = 1;
     noise_.timer_period = noise_period_table[0];
