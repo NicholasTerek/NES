@@ -92,6 +92,7 @@ private:
     std::int8_t relative_ = 0;
     bool page_crossed_ = false;
     bool interrupt_disable_sampled_ = true;
+    bool powered_ = false;
     AddressMode current_mode_ = AddressMode::implied;
 
     [[nodiscard]] static const std::array<Instruction, 256>& instruction_table();

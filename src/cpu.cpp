@@ -5,11 +5,18 @@ namespace nes {
 Cpu::Cpu(CpuBusDevice& bus) : bus_(bus) {}
 
 void Cpu::reset() {
-    state_.a = 0;
-    state_.x = 0;
-    state_.y = 0;
-    state_.stack_pointer = 0xFD;
-    state_.status = unused | interrupt_disable;
+    if (!powered_) {
+        state_.a = 0;
+        state_.x = 0;
+        state_.y = 0;
+        state_.stack_pointer = 0xFD;
+        state_.status = unused | interrupt_disable;
+        powered_ = true;
+    } else {
+        state_.stack_pointer = static_cast<std::uint8_t>(state_.stack_pointer - 3U);
+        set_flag(interrupt_disable, true);
+        set_flag(unused, true);
+    }
     state_.program_counter = read_word(0xFFFC);
     remaining_cycles_ = 8;
     interrupt_disable_sampled_ = true;

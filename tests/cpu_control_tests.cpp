@@ -179,6 +179,32 @@ void rti_polls_the_restored_interrupt_mask_without_cli_latency() {
            "RTI immediately polls the restored interrupt mask");
 }
 
+void soft_reset_preserves_registers_and_discards_three_stack_bytes() {
+    FlatMemory memory;
+    memory.set_reset_vector(0x8000);
+    Cpu cpu(memory);
+    reset(cpu);
+    cpu.state().a = 0x34;
+    cpu.state().x = 0x56;
+    cpu.state().y = 0x78;
+    cpu.state().stack_pointer = 0x11;
+    cpu.state().status = Cpu::carry | Cpu::decimal | Cpu::unused;
+    memory.bytes[0x0111] = 0xFB;
+    memory.bytes[0x0110] = 0x9A;
+    memory.bytes[0x010F] = 0xBC;
+
+    cpu.reset();
+    expect(cpu.state().a == 0x34 && cpu.state().x == 0x56 && cpu.state().y == 0x78,
+           "soft reset preserves A, X, and Y");
+    expect(cpu.state().stack_pointer == 0x0E,
+           "soft reset discards three stack positions");
+    expect(cpu.flag(Cpu::interrupt_disable) && cpu.flag(Cpu::decimal),
+           "soft reset sets I without replacing the other status flags");
+    expect(memory.bytes[0x0111] == 0xFB && memory.bytes[0x0110] == 0x9A &&
+               memory.bytes[0x010F] == 0xBC,
+           "soft reset does not write discarded stack positions");
+}
+
 void break_and_return_restore_the_program_counter() {
     FlatMemory memory;
     memory.set_reset_vector(0x8000);
@@ -210,6 +236,7 @@ int run_cpu_control_tests() {
     interrupts_push_hardware_accurate_frames();
     irq_polling_uses_the_pre_instruction_interrupt_mask();
     rti_polls_the_restored_interrupt_mask_without_cli_latency();
+    soft_reset_preserves_registers_and_discards_three_stack_bytes();
     break_and_return_restore_the_program_counter();
     return nes::test::failures - before;
 }
