@@ -141,6 +141,8 @@ void vertical_blank_raises_one_nmi_request() {
     ppu.cpu_write(0x2000, 0x80);
     clock_until(ppu, 241, 1);
     ppu.clock();
+    ppu.clock();
+    ppu.clock();
     expect(ppu.state().nmi_pending, "enabled PPU raises an NMI at vertical blank");
     expect(ppu.poll_nmi(), "PPU exposes its pending NMI to the system bus");
     expect(!ppu.poll_nmi(), "PPU NMI request is consumed exactly once");
@@ -152,6 +154,8 @@ void enabling_nmi_during_vertical_blank_requests_it_immediately() {
     ppu.clock();
     expect(!ppu.state().nmi_pending, "disabled NMI does not fire at vertical blank");
     ppu.cpu_write(0x2000, 0x80);
+    ppu.clock();
+    ppu.clock();
     expect(ppu.state().nmi_pending, "enabling NMI during vertical blank requests one");
 }
 
@@ -181,7 +185,7 @@ void system_bus_delivers_ppu_nmi_to_the_cpu() {
     bus.cpu_write(0x2000, 0x80);
     clock_until(bus.ppu(), 241, 1);
     bus.clock();
-    for (int count = 0; count < 9 && bus.cpu().state().program_counter != 0x9000; ++count) {
+    for (int count = 0; count < 100 && bus.cpu().state().program_counter != 0x9000; ++count) {
         bus.clock();
     }
     expect(bus.cpu().state().program_counter == 0x9000,

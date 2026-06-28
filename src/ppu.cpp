@@ -55,6 +55,7 @@ std::uint8_t Ppu::cpu_read(std::uint16_t address, bool read_only) {
         }
         value = static_cast<std::uint8_t>((status_ & 0xE0U) | (open_bus_ & 0x1FU));
         status_ = static_cast<std::uint8_t>(status_ & ~status_vertical_blank);
+        nmi_delay_clocks_ = 0;
         write_latch_ = false;
         drive_open_bus(value, 0xE0U);
         break;
@@ -92,8 +93,10 @@ void Ppu::cpu_write(std::uint16_t address, std::uint8_t value) {
     case 0:
         if ((control_ & control_enable_nmi) == 0U && (value & control_enable_nmi) != 0U &&
             (status_ & status_vertical_blank) != 0U) {
-            nmi_pending_ = true;
-            nmi_instruction_delay_ = true;
+            nmi_delay_clocks_ = 2;
+            nmi_instruction_delay_ = 1;
+        } else if ((value & control_enable_nmi) == 0U) {
+            nmi_delay_clocks_ = 0;
         }
         control_ = value;
         temporary_address_ = static_cast<std::uint16_t>(
@@ -185,9 +188,17 @@ void Ppu::ppu_write(std::uint16_t address, std::uint8_t value) {
 
 void Ppu::clock() {
     decay_open_bus();
+    if (nmi_delay_clocks_ != 0U) {
+        --nmi_delay_clocks_;
+        if (nmi_delay_clocks_ == 0U && (control_ & control_enable_nmi) != 0U &&
+            (status_ & status_vertical_blank) != 0U) {
+            nmi_pending_ = true;
+        }
+    }
     if (scanline_ == -1 && cycle_ == 1) {
         status_ = static_cast<std::uint8_t>(
             status_ & ~(status_vertical_blank | status_sprite_overflow | status_sprite_zero_hit));
+        nmi_delay_clocks_ = 0;
     }
     if (scanline_ == 241 && cycle_ == 1) {
         if (suppress_vertical_blank_) {
@@ -195,8 +206,8 @@ void Ppu::clock() {
         } else {
             status_ = static_cast<std::uint8_t>(status_ | status_vertical_blank);
             if ((control_ & control_enable_nmi) != 0U) {
-                nmi_pending_ = true;
-                nmi_instruction_delay_ = false;
+                nmi_delay_clocks_ = 2;
+                nmi_instruction_delay_ = 2;
             }
         }
     }
@@ -274,7 +285,8 @@ void Ppu::reset() {
     odd_frame_ = false;
     odd_frame_skip_armed_ = false;
     nmi_pending_ = false;
-    nmi_instruction_delay_ = false;
+    nmi_instruction_delay_ = 0;
+    nmi_delay_clocks_ = 0;
     suppress_vertical_blank_ = false;
     next_tile_id_ = 0;
     next_tile_attribute_ = 0;
@@ -309,12 +321,14 @@ void Ppu::clear_frame_complete() noexcept {
 bool Ppu::poll_nmi() noexcept {
     const auto pending = nmi_pending_;
     nmi_pending_ = false;
-    nmi_instruction_delay_ = false;
+    if (pending) {
+        nmi_instruction_delay_ = 0;
+    }
     return pending;
 }
 
-bool Ppu::nmi_requires_instruction_delay() const noexcept {
-    return nmi_pending_ && nmi_instruction_delay_;
+std::uint8_t Ppu::nmi_instruction_delay() const noexcept {
+    return nmi_pending_ ? nmi_instruction_delay_ : 0U;
 }
 
 std::uint8_t Ppu::oam_read(std::uint8_t address) const noexcept {

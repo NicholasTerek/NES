@@ -41,10 +41,10 @@ void Bus::reset() {
 
 void Bus::clock() {
     ppu_.clock();
-    const auto delay_nmi = ppu_.nmi_requires_instruction_delay();
+    const auto delay_nmi = ppu_.nmi_instruction_delay();
     if (ppu_.poll_nmi()) {
         nmi_pending_ = true;
-        nmi_delay_boundaries_ = static_cast<std::uint8_t>(delay_nmi ? 1U : 0U);
+        nmi_delay_boundaries_ = delay_nmi;
     }
     if (system_clock_counter_ % 3U == 0U) {
         apu_.clock();
