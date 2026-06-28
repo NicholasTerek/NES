@@ -13,6 +13,7 @@ add_library(nes_core
     src/apu.cpp
     src/bus.cpp
     src/cpu.cpp
+    src/emulator.cpp
     src/cartridge.cpp
     src/mapper.cpp
     src/ppu.cpp
@@ -28,6 +29,27 @@ add_executable(nes_cpu_functional
     tools/cpu_functional_runner.cpp
 )
 target_link_libraries(nes_cpu_functional PRIVATE nes_core)
+
+add_executable(nes_runner
+    tools/nes_runner.cpp
+)
+target_link_libraries(nes_runner PRIVATE nes_core)
+
+if(NES_BUILD_SDL)
+    find_package(SDL2 QUIET)
+    if(SDL2_FOUND)
+        add_executable(nes_sdl
+            tools/nes_sdl.cpp
+        )
+        target_link_libraries(nes_sdl PRIVATE nes_core)
+        if(TARGET SDL2::SDL2)
+            target_link_libraries(nes_sdl PRIVATE SDL2::SDL2)
+        else()
+            target_include_directories(nes_sdl PRIVATE ${SDL2_INCLUDE_DIRS})
+            target_link_libraries(nes_sdl PRIVATE ${SDL2_LIBRARIES})
+        endif()
+    endif()
+endif()
 
 if(NES_BUILD_TESTS)
     enable_testing()
@@ -45,6 +67,7 @@ if(NES_BUILD_TESTS)
         tests/ppu_background_tests.cpp
         tests/ppu_sprite_tests.cpp
         tests/apu_tests.cpp
+        tests/emulator_tests.cpp
     )
     target_link_libraries(nes_tests PRIVATE nes_core)
     add_test(NAME nes_tests COMMAND nes_tests)

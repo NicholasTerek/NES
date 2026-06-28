@@ -320,6 +320,7 @@ int run_ppu_timing_tests();
 int run_ppu_background_tests();
 int run_ppu_sprite_tests();
 int run_apu_tests();
+int run_emulator_tests();
 
 int main() {
     reset_uses_vector();
@@ -346,6 +347,7 @@ int main() {
     static_cast<void>(run_ppu_background_tests());
     static_cast<void>(run_ppu_sprite_tests());
     static_cast<void>(run_apu_tests());
+    static_cast<void>(run_emulator_tests());
 
     if (failures != 0) {
         std::cerr << failures << " test(s) failed\n";
