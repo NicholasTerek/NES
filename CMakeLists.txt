@@ -68,6 +68,7 @@ if(NES_BUILD_TESTS)
         tests/ppu_sprite_tests.cpp
         tests/apu_tests.cpp
         tests/emulator_tests.cpp
+        tests/system_tests.cpp
     )
     target_link_libraries(nes_tests PRIVATE nes_core)
     add_test(NAME nes_tests COMMAND nes_tests)
