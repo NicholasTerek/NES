@@ -15,17 +15,19 @@ namespace {
 constexpr std::uint16_t status_address = 0x6000;
 constexpr std::uint16_t signature_address = 0x6001;
 constexpr std::uint16_t message_address = 0x6004;
+constexpr std::uint16_t legacy_result_address = 0x00F8;
 constexpr std::uint8_t running = 0x80;
 constexpr std::uint8_t reset_requested = 0x81;
 
 struct Options {
     std::filesystem::path rom;
     std::size_t maximum_frames = 1'800;
+    bool legacy_result = false;
 };
 
 [[noreturn]] void usage_error(std::string_view message) {
     throw std::invalid_argument(std::string(message) +
-                                "\nusage: nes_conformance ROM [--frames N]");
+                                "\nusage: nes_conformance ROM [--frames N] [--legacy-f8]");
 }
 
 std::size_t parse_count(const std::string& text) {
@@ -46,6 +48,10 @@ Options parse_options(int argc, char** argv) {
     options.rom = argv[1];
     for (int index = 2; index < argc; ++index) {
         const std::string option = argv[index];
+        if (option == "--legacy-f8") {
+            options.legacy_result = true;
+            continue;
+        }
         if (option != "--frames" || index + 1 >= argc) {
             usage_error("unknown or incomplete option: " + option);
         }
@@ -80,6 +86,8 @@ int run(const Options& options) {
     bool signature_seen = false;
     std::size_t reset_count = 0;
     std::size_t reset_cooldown = 0;
+    std::uint8_t legacy_candidate = 0;
+    std::size_t legacy_stable_frames = 0;
 
     for (std::size_t frame = 1; frame <= options.maximum_frames; ++frame) {
         emulator.run_frame();
@@ -87,6 +95,27 @@ int run(const Options& options) {
             --reset_cooldown;
         }
         auto& bus = emulator.bus();
+        if (options.legacy_result) {
+            const auto result = bus.cpu_read(legacy_result_address, true);
+            if (result == 1U) {
+                std::cout << options.rom.filename().string() << ": legacy status "
+                          << static_cast<unsigned>(result) << " after " << frame
+                          << " frame(s)\n";
+                return 0;
+            }
+            if (result == 0U || result != legacy_candidate) {
+                legacy_candidate = result;
+                legacy_stable_frames = 0;
+            } else {
+                ++legacy_stable_frames;
+            }
+            if (result != 0U && legacy_stable_frames >= 60U) {
+                std::cout << options.rom.filename().string() << ": legacy status "
+                          << static_cast<unsigned>(result) << " after " << frame
+                          << " frame(s)\n";
+                return 1;
+            }
+        }
         if (!has_blargg_signature(bus)) {
             continue;
         }
