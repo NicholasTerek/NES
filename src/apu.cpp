@@ -34,15 +34,25 @@ constexpr std::array<std::uint16_t, 16> dmc_rate_table{
 }  // namespace
 
 void Apu::reset() noexcept {
+    const auto triangle_control = triangle_.control;
+    const auto triangle_linear_reload = triangle_.linear_reload;
+    const auto frame_mode = five_step_mode_;
+    const auto frame_irq_inhibit = irq_inhibit_;
     cpu_cycle_ = 0;
     frame_cycle_ = 0;
     quarter_frame_ticks_ = 0;
     half_frame_ticks_ = 0;
-    five_step_mode_ = false;
-    irq_inhibit_ = false;
+    five_step_mode_ = frame_mode;
+    irq_inhibit_ = frame_irq_inhibit;
     frame_irq_ = false;
+    frame_write_pending_ = true;
+    pending_five_step_mode_ = frame_mode;
+    pending_irq_inhibit_ = frame_irq_inhibit;
+    frame_write_delay_ = 3;
     pulse_ = {};
     triangle_ = {};
+    triangle_.control = triangle_control;
+    triangle_.linear_reload = triangle_linear_reload;
     noise_ = {};
     noise_.shift_register = 1;
     noise_.timer_period = noise_period_table[0];
@@ -58,7 +68,24 @@ void Apu::reset() noexcept {
 
 void Apu::clock() noexcept {
     ++cpu_cycle_;
-    ++frame_cycle_;
+    bool frame_counter_reset = false;
+    if (frame_write_pending_) {
+        --frame_write_delay_;
+        if (frame_write_delay_ == 0U) {
+            frame_write_pending_ = false;
+            five_step_mode_ = pending_five_step_mode_;
+            irq_inhibit_ = pending_irq_inhibit_;
+            frame_cycle_ = 0;
+            frame_counter_reset = true;
+            if (five_step_mode_) {
+                clock_quarter_frame();
+                clock_half_frame();
+            }
+        }
+    }
+    if (!frame_counter_reset) {
+        ++frame_cycle_;
+    }
     clock_dmc();
     clock_triangle_timer();
     if ((cpu_cycle_ & 0x01U) == 0U) {
@@ -69,44 +96,48 @@ void Apu::clock() noexcept {
 
     if (!five_step_mode_) {
         switch (frame_cycle_) {
-        case 3'729:
-        case 11'186:
-            clock_quarter_frame();
-            break;
         case 7'457:
+        case 22'371:
+            clock_quarter_frame();
+            break;
+        case 14'913:
+        case 29'829:
             clock_quarter_frame();
             clock_half_frame();
             break;
-        case 14'915:
-            clock_quarter_frame();
-            clock_half_frame();
-            if (!irq_inhibit_) {
-                frame_irq_ = true;
-            }
-            frame_cycle_ = 0;
+        case 29'828:
+        case 29'830:
             break;
         default:
             break;
+        }
+        if (frame_cycle_ >= 29'828U && frame_cycle_ <= 29'830U) {
+            if (!irq_inhibit_) {
+                frame_irq_ = true;
+            }
+        }
+        if (frame_cycle_ == 29'830U) {
+            frame_cycle_ = 0;
         }
         queue_output_sample();
         return;
     }
 
     switch (frame_cycle_) {
-    case 3'729:
-    case 11'186:
+    case 7'457:
+    case 22'371:
         clock_quarter_frame();
         break;
-    case 7'457:
-    case 18'641:
+    case 14'913:
+    case 37'281:
         clock_quarter_frame();
         clock_half_frame();
-        if (frame_cycle_ == 18'641U) {
-            frame_cycle_ = 0;
-        }
         break;
     default:
         break;
+    }
+    if (frame_cycle_ == 37'282U) {
+        frame_cycle_ = 0;
     }
     queue_output_sample();
 }
@@ -237,16 +268,13 @@ void Apu::cpu_write(std::uint16_t address, std::uint8_t value) noexcept {
         return;
     }
 
-    five_step_mode_ = (value & 0x80U) != 0U;
-    irq_inhibit_ = (value & 0x40U) != 0U;
-    if (irq_inhibit_) {
+    pending_five_step_mode_ = (value & 0x80U) != 0U;
+    pending_irq_inhibit_ = (value & 0x40U) != 0U;
+    if (pending_irq_inhibit_) {
         frame_irq_ = false;
     }
-    frame_cycle_ = 0;
-    if (five_step_mode_) {
-        clock_quarter_frame();
-        clock_half_frame();
-    }
+    frame_write_pending_ = true;
+    frame_write_delay_ = static_cast<std::uint8_t>((cpu_cycle_ & 0x01U) == 0U ? 3U : 4U);
 }
 
 void Apu::set_dmc_reader(std::function<std::uint8_t(std::uint16_t)> reader) {
@@ -529,7 +557,7 @@ void Apu::clock_dmc() noexcept {
         --dmc_.timer_counter;
         return;
     }
-    dmc_.timer_counter = dmc_.timer_period;
+    dmc_.timer_counter = static_cast<std::uint16_t>(dmc_.timer_period - 1U);
     if (!dmc_.silence) {
         if ((dmc_.shift_register & 0x01U) != 0U) {
             if (dmc_.output_level <= 125U) {

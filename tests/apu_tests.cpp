@@ -18,7 +18,7 @@ void clock_apu(nes::Apu& apu, std::uint32_t cycles) {
 void four_step_sequence_clocks_envelopes_and_lengths() {
     nes::Apu apu;
     apu.reset();
-    clock_apu(apu, 14'915);
+    clock_apu(apu, 29'833);
     const auto state = apu.state();
     expect(state.quarter_frame_ticks == 4,
            "four-step APU mode clocks four quarter-frame units");
@@ -30,7 +30,7 @@ void four_step_sequence_clocks_envelopes_and_lengths() {
 
 void status_reads_report_and_acknowledge_frame_interrupts() {
     nes::Apu apu;
-    clock_apu(apu, 14'915);
+    clock_apu(apu, 29'830);
     expect((apu.cpu_read(0x4015, true) & 0x40U) != 0U,
            "read-only APU status reports the frame interrupt");
     expect(apu.irq_pending(), "read-only APU status preserves the frame interrupt");
@@ -42,9 +42,10 @@ void status_reads_report_and_acknowledge_frame_interrupts() {
 void five_step_sequence_never_raises_a_frame_interrupt() {
     nes::Apu apu;
     apu.cpu_write(0x4017, 0x80);
+    clock_apu(apu, 3);
     expect(apu.state().quarter_frame_ticks == 1 && apu.state().half_frame_ticks == 1,
            "selecting five-step mode immediately clocks frame units");
-    clock_apu(apu, 18'641);
+    clock_apu(apu, 37'282);
     const auto state = apu.state();
     expect(state.quarter_frame_ticks == 5,
            "five-step APU mode clocks four scheduled quarter frames");
@@ -55,25 +56,44 @@ void five_step_sequence_never_raises_a_frame_interrupt() {
 
 void frame_irq_inhibit_clears_and_suppresses_interrupts() {
     nes::Apu apu;
-    clock_apu(apu, 14'915);
+    clock_apu(apu, 29'830);
     apu.cpu_write(0x4017, 0x40);
     expect(!apu.irq_pending(), "frame IRQ inhibit clears an outstanding interrupt");
-    clock_apu(apu, 14'915);
+    clock_apu(apu, 29'830);
     expect(!apu.irq_pending(), "frame IRQ inhibit suppresses future interrupts");
+}
+
+void reset_preserves_triangle_control_and_frame_mode() {
+    nes::Apu apu;
+    apu.cpu_write(0x4017, 0x80);
+    clock_apu(apu, 3);
+    apu.cpu_write(0x4008, 0xFF);
+    apu.reset();
+    apu.cpu_write(0x4015, 0x04);
+    apu.cpu_write(0x400B, 0x18);
+    clock_apu(apu, 29'830);
+
+    expect(apu.state().five_step_mode,
+           "reset preserves the last frame-counter mode");
+    expect(apu.state().triangle_length != 0U,
+           "reset preserves triangle length-counter halt control");
 }
 
 void system_bus_clocks_and_maps_the_apu() {
     nes::Bus bus;
     bus.reset();
-    for (std::uint32_t clock = 0; clock < 3U * 3'729U; ++clock) {
+    for (std::uint32_t clock = 0; clock < 3U * 7'460U; ++clock) {
         bus.clock();
     }
-    expect(bus.apu().state().cpu_cycle == 3'729U,
+    expect(bus.apu().state().cpu_cycle == 7'460U,
            "the system bus clocks the APU once per CPU cycle");
     expect(bus.apu().state().quarter_frame_ticks == 1,
            "the connected APU advances its frame sequencer");
 
     bus.cpu_write(0x4017, 0x80);
+    for (int clock = 0; clock < 18; ++clock) {
+        bus.clock();
+    }
     expect(bus.apu().state().five_step_mode, "$4017 selects APU five-step mode");
     expect(bus.cpu_read(0x4015, true) == 0, "$4015 exposes APU status on the CPU bus");
 }
@@ -107,7 +127,7 @@ void half_frames_clock_pulse_length_and_sweep_units() {
     apu.cpu_write(0x4007, 0x01);
     apu.cpu_write(0x4005, 0x89);
     const auto before = apu.state();
-    clock_apu(apu, 7'457);
+    clock_apu(apu, 14'913);
     const auto after = apu.state();
     expect(after.pulse_length[0] + 1U == before.pulse_length[0],
            "half-frame clocks decrement pulse length counters");
@@ -139,7 +159,7 @@ void triangle_linear_counter_gates_its_waveform() {
            "triangle high timer write loads its length counter");
     expect(apu.state().triangle_level == 0,
            "triangle stays silent until the linear counter reloads");
-    clock_apu(apu, 3'729);
+    clock_apu(apu, 7'457);
     expect(apu.state().triangle_linear == 2,
            "quarter-frame reloads the triangle linear counter");
     clock_apu(apu, 4);
@@ -198,7 +218,7 @@ void dmc_fetches_samples_and_stalls_the_cpu() {
     expect(apu.state().dmc_address == 0xC081,
            "DMC advances its memory reader after fetching a sample byte");
 
-    clock_apu(apu, 55);
+    clock_apu(apu, 54);
     expect(apu.state().dmc_output == 0x42,
            "DMC output unit applies sample bits in two-level steps");
 }
@@ -267,6 +287,7 @@ int run_apu_tests() {
     status_reads_report_and_acknowledge_frame_interrupts();
     five_step_sequence_never_raises_a_frame_interrupt();
     frame_irq_inhibit_clears_and_suppresses_interrupts();
+    reset_preserves_triangle_control_and_frame_mode();
     system_bus_clocks_and_maps_the_apu();
     pulse_registers_load_length_and_generate_a_duty_wave();
     half_frames_clock_pulse_length_and_sweep_units();

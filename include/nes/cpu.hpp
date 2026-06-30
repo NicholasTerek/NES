@@ -36,6 +36,7 @@ public:
 
     void reset();
     void irq();
+    void poll_irq();
     void nmi();
     void clock();
 
@@ -68,7 +69,10 @@ private:
         clc, cld, cli, clv, cmp, cpx, cpy, dec, dex, dey, eor_, inc, inx,
         iny, jmp, jsr, lda, ldx, ldy, lsr, nop, ora, pha, php, pla, plp,
         rol, ror, rti, rts, sbc, sec, sed, sei, sta, stx, sty, tax, tay,
-        tsx, txa, txs, tya, illegal,
+        tsx, txa, txs, tya,
+        ahx, alr, anc, arr, atx, axs, dcp, isc, las, lax, rla, rra, sax, shx,
+        shy, slo, sre, tas, xaa,
+        illegal,
     };
 
     struct Instruction {
@@ -84,8 +88,11 @@ private:
     std::uint8_t remaining_cycles_ = 0;
     std::uint8_t opcode_ = 0;
     std::uint16_t address_ = 0;
+    std::uint16_t dummy_address_ = 0;
     std::int8_t relative_ = 0;
     bool page_crossed_ = false;
+    bool interrupt_disable_sampled_ = true;
+    bool powered_ = false;
     AddressMode current_mode_ = AddressMode::implied;
 
     [[nodiscard]] static const std::array<Instruction, 256>& instruction_table();
@@ -99,6 +106,7 @@ private:
     void execute(Operation operation);
     [[nodiscard]] std::uint8_t operand();
     void store_operand(std::uint8_t value);
+    void store_mutation(std::uint8_t original, std::uint8_t value);
     void set_zero_negative(std::uint8_t value) noexcept;
     void branch(bool condition);
 };

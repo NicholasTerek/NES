@@ -66,6 +66,7 @@ public:
     [[nodiscard]] std::uint8_t pixel(std::size_t x, std::size_t y) const;
     void clear_frame_complete() noexcept;
     [[nodiscard]] bool poll_nmi() noexcept;
+    [[nodiscard]] std::uint8_t nmi_instruction_delay() const noexcept;
     [[nodiscard]] std::uint8_t oam_read(std::uint8_t address) const noexcept;
     void oam_write(std::uint8_t address, std::uint8_t value) noexcept;
     [[nodiscard]] const std::array<std::uint8_t, 256>& oam() const noexcept;
@@ -78,6 +79,8 @@ private:
     [[nodiscard]] std::size_t nametable_index(std::uint16_t address) const;
     [[nodiscard]] static std::size_t palette_index(std::uint16_t address);
     [[nodiscard]] bool rendering_enabled() const noexcept;
+    void drive_open_bus(std::uint8_t value, std::uint8_t mask) noexcept;
+    void decay_open_bus() noexcept;
     void fetch_background_data();
     void load_background_shifters();
     void update_background_shifters();
@@ -87,6 +90,8 @@ private:
     void transfer_scroll_y();
     void render_pixel();
     void evaluate_sprites();
+    [[nodiscard]] std::int16_t calculate_sprite_overflow_cycle(
+        std::int16_t target_scanline) const noexcept;
     void fetch_sprite_patterns(std::int16_t target_scanline);
     void update_sprite_shifters();
     [[nodiscard]] static std::uint8_t reverse_bits(std::uint8_t value) noexcept;
@@ -111,12 +116,17 @@ private:
     bool write_latch_ = false;
     std::uint8_t data_buffer_ = 0;
     std::uint8_t open_bus_ = 0;
+    std::array<std::uint32_t, 8> open_bus_decay_{};
     std::uint8_t oam_address_ = 0;
     std::int16_t scanline_ = -1;
     std::int16_t cycle_ = 0;
     bool frame_complete_ = false;
     bool odd_frame_ = false;
+    bool odd_frame_skip_armed_ = false;
     bool nmi_pending_ = false;
+    std::uint8_t nmi_instruction_delay_ = 0;
+    std::uint8_t nmi_delay_clocks_ = 0;
+    bool suppress_vertical_blank_ = false;
 
     std::uint8_t next_tile_id_ = 0;
     std::uint8_t next_tile_attribute_ = 0;
@@ -128,6 +138,7 @@ private:
     std::uint16_t attribute_shift_high_ = 0;
     std::uint8_t sprite_count_ = 0;
     bool sprite_zero_possible_ = false;
+    std::int16_t sprite_overflow_cycle_ = -1;
 };
 
 }  // namespace nes

@@ -19,6 +19,7 @@ constexpr std::uint8_t mask_render_sprites = 0x10;
 constexpr std::uint8_t status_vertical_blank = 0x80;
 constexpr std::uint8_t status_sprite_overflow = 0x20;
 constexpr std::uint8_t status_sprite_zero_hit = 0x40;
+constexpr std::uint32_t open_bus_decay_clocks = 3'000'000;
 
 }  // namespace
 
@@ -49,22 +50,31 @@ std::uint8_t Ppu::cpu_read(std::uint16_t address, bool read_only) {
     std::uint8_t value = open_bus_;
     switch (selected_register) {
     case 2:
+        if (scanline_ == 241 && cycle_ == 1) {
+            suppress_vertical_blank_ = true;
+        }
         value = static_cast<std::uint8_t>((status_ & 0xE0U) | (open_bus_ & 0x1FU));
         status_ = static_cast<std::uint8_t>(status_ & ~status_vertical_blank);
+        nmi_delay_clocks_ = 0;
         write_latch_ = false;
+        drive_open_bus(value, 0xE0U);
         break;
     case 4:
-        value = oam_[oam_address_];
+        value = static_cast<std::uint8_t>(
+            oam_[oam_address_] & ((oam_address_ & 0x03U) == 0x02U ? 0xE3U : 0xFFU));
+        drive_open_bus(value, 0xFFU);
         break;
     case 7: {
         const auto address_before_increment = vram_address_;
         const auto fetched = ppu_read(address_before_increment);
         if ((address_before_increment & 0x3FFFU) >= 0x3F00U) {
-            value = fetched;
+            value = static_cast<std::uint8_t>((open_bus_ & 0xC0U) | (fetched & 0x3FU));
             data_buffer_ = ppu_read(static_cast<std::uint16_t>(address_before_increment - 0x1000U));
+            drive_open_bus(value, 0x3FU);
         } else {
             value = data_buffer_;
             data_buffer_ = fetched;
+            drive_open_bus(value, 0xFFU);
         }
         vram_address_ = static_cast<std::uint16_t>(
             (vram_address_ + ((control_ & control_increment_mode) != 0U ? 32U : 1U)) &
@@ -74,17 +84,19 @@ std::uint8_t Ppu::cpu_read(std::uint16_t address, bool read_only) {
     default:
         break;
     }
-    open_bus_ = value;
     return value;
 }
 
 void Ppu::cpu_write(std::uint16_t address, std::uint8_t value) {
-    open_bus_ = value;
+    drive_open_bus(value, 0xFFU);
     switch (address & 0x0007U) {
     case 0:
         if ((control_ & control_enable_nmi) == 0U && (value & control_enable_nmi) != 0U &&
             (status_ & status_vertical_blank) != 0U) {
-            nmi_pending_ = true;
+            nmi_delay_clocks_ = 2;
+            nmi_instruction_delay_ = 1;
+        } else if ((value & control_enable_nmi) == 0U) {
+            nmi_delay_clocks_ = 0;
         }
         control_ = value;
         temporary_address_ = static_cast<std::uint16_t>(
@@ -175,18 +187,42 @@ void Ppu::ppu_write(std::uint16_t address, std::uint8_t value) {
 }
 
 void Ppu::clock() {
+    decay_open_bus();
+    if (cycle_ == 0) {
+        sprite_overflow_cycle_ = -1;
+    }
+    if (nmi_delay_clocks_ != 0U) {
+        --nmi_delay_clocks_;
+        if (nmi_delay_clocks_ == 0U && (control_ & control_enable_nmi) != 0U &&
+            (status_ & status_vertical_blank) != 0U) {
+            nmi_pending_ = true;
+        }
+    }
     if (scanline_ == -1 && cycle_ == 1) {
         status_ = static_cast<std::uint8_t>(
             status_ & ~(status_vertical_blank | status_sprite_overflow | status_sprite_zero_hit));
+        nmi_delay_clocks_ = 0;
     }
     if (scanline_ == 241 && cycle_ == 1) {
-        status_ = static_cast<std::uint8_t>(status_ | status_vertical_blank);
-        if ((control_ & control_enable_nmi) != 0U) {
-            nmi_pending_ = true;
+        if (suppress_vertical_blank_) {
+            suppress_vertical_blank_ = false;
+        } else {
+            status_ = static_cast<std::uint8_t>(status_ | status_vertical_blank);
+            if ((control_ & control_enable_nmi) != 0U) {
+                nmi_delay_clocks_ = 2;
+                nmi_instruction_delay_ = 2;
+            }
         }
     }
 
     if (scanline_ >= -1 && scanline_ < 240 && rendering_enabled()) {
+        if (cycle_ == 65) {
+            sprite_overflow_cycle_ = calculate_sprite_overflow_cycle(
+                static_cast<std::int16_t>(scanline_ + 1));
+        }
+        if (cycle_ == sprite_overflow_cycle_) {
+            status_ = static_cast<std::uint8_t>(status_ | status_sprite_overflow);
+        }
         if ((cycle_ >= 2 && cycle_ < 258) || (cycle_ >= 321 && cycle_ < 338)) {
             update_background_shifters();
             if (cycle_ < 258) {
@@ -219,7 +255,11 @@ void Ppu::clock() {
         render_pixel();
     }
 
-    if (scanline_ == -1 && cycle_ == 339 && odd_frame_ && rendering_enabled()) {
+    if (scanline_ == -1 && cycle_ == 338) {
+        odd_frame_skip_armed_ = odd_frame_ && rendering_enabled();
+    }
+    if (scanline_ == -1 && cycle_ == 339 && odd_frame_skip_armed_) {
+        odd_frame_skip_armed_ = false;
         cycle_ = 0;
         scanline_ = 0;
         return;
@@ -247,12 +287,17 @@ void Ppu::reset() {
     write_latch_ = false;
     data_buffer_ = 0;
     open_bus_ = 0;
+    open_bus_decay_.fill(0);
     oam_address_ = 0;
     scanline_ = -1;
     cycle_ = 0;
     frame_complete_ = false;
     odd_frame_ = false;
+    odd_frame_skip_armed_ = false;
     nmi_pending_ = false;
+    nmi_instruction_delay_ = 0;
+    nmi_delay_clocks_ = 0;
+    suppress_vertical_blank_ = false;
     next_tile_id_ = 0;
     next_tile_attribute_ = 0;
     next_tile_low_ = 0;
@@ -267,6 +312,7 @@ void Ppu::reset() {
     sprite_x_counters_.fill(0);
     sprite_count_ = 0;
     sprite_zero_possible_ = false;
+    sprite_overflow_cycle_ = -1;
     framebuffer_.fill(0);
 }
 
@@ -286,7 +332,14 @@ void Ppu::clear_frame_complete() noexcept {
 bool Ppu::poll_nmi() noexcept {
     const auto pending = nmi_pending_;
     nmi_pending_ = false;
+    if (pending) {
+        nmi_instruction_delay_ = 0;
+    }
     return pending;
+}
+
+std::uint8_t Ppu::nmi_instruction_delay() const noexcept {
+    return nmi_pending_ ? nmi_instruction_delay_ : 0U;
 }
 
 std::uint8_t Ppu::oam_read(std::uint8_t address) const noexcept {
@@ -327,6 +380,30 @@ std::uint8_t Ppu::pixel(std::size_t x, std::size_t y) const {
 
 bool Ppu::rendering_enabled() const noexcept {
     return (mask_ & (mask_render_background | mask_render_sprites)) != 0U;
+}
+
+void Ppu::drive_open_bus(std::uint8_t value, std::uint8_t mask) noexcept {
+    open_bus_ = static_cast<std::uint8_t>((open_bus_ & ~mask) | (value & mask));
+    for (std::uint8_t bit = 0; bit < 8U; ++bit) {
+        const auto bit_mask = static_cast<std::uint8_t>(1U << bit);
+        if ((mask & bit_mask) != 0U) {
+            open_bus_decay_[bit] = open_bus_decay_clocks;
+        }
+    }
+}
+
+void Ppu::decay_open_bus() noexcept {
+    for (std::uint8_t bit = 0; bit < 8U; ++bit) {
+        auto& remaining = open_bus_decay_[bit];
+        if (remaining == 0U) {
+            continue;
+        }
+        --remaining;
+        if (remaining == 0U) {
+            open_bus_ = static_cast<std::uint8_t>(
+                open_bus_ & ~static_cast<std::uint8_t>(1U << bit));
+        }
+    }
 }
 
 void Ppu::fetch_background_data() {
@@ -512,19 +589,17 @@ void Ppu::evaluate_sprites() {
     active_sprites_.fill({});
     sprite_count_ = 0;
     sprite_zero_possible_ = false;
-    status_ = static_cast<std::uint8_t>(status_ & ~status_sprite_overflow);
 
     const auto target_scanline = static_cast<std::int16_t>(scanline_ + 1);
-    if (target_scanline < 0 || target_scanline >= static_cast<std::int16_t>(screen_height)) {
+    if (target_scanline < 0 || target_scanline > static_cast<std::int16_t>(screen_height)) {
         return;
     }
     const auto sprite_height = static_cast<std::int16_t>((control_ & 0x20U) != 0U ? 16 : 8);
     std::uint8_t visible_count = 0;
     for (std::uint8_t index = 0; index < 64U; ++index) {
         const auto offset = static_cast<std::size_t>(index) * 4U;
-        const auto top = static_cast<std::uint8_t>(oam_[offset] + 1U);
-        const auto row = static_cast<std::int16_t>(
-            target_scanline - static_cast<std::int16_t>(top));
+        const auto top = static_cast<std::int16_t>(oam_[offset]) + 1;
+        const auto row = static_cast<std::int16_t>(target_scanline - top);
         if (row < 0 || row >= sprite_height) {
             continue;
         }
@@ -539,9 +614,44 @@ void Ppu::evaluate_sprites() {
         ++visible_count;
     }
     sprite_count_ = static_cast<std::uint8_t>(visible_count > 8U ? 8U : visible_count);
-    if (visible_count > 8U) {
-        status_ = static_cast<std::uint8_t>(status_ | status_sprite_overflow);
+}
+
+std::int16_t Ppu::calculate_sprite_overflow_cycle(
+    std::int16_t target_scanline) const noexcept {
+    if (target_scanline < 0 || target_scanline > static_cast<std::int16_t>(screen_height)) {
+        return -1;
     }
+
+    const auto sprite_height = static_cast<std::int16_t>((control_ & 0x20U) != 0U ? 16 : 8);
+    std::uint8_t sprite = 0;
+    std::uint8_t byte = 0;
+    std::uint8_t visible = 0;
+    std::int16_t cycle = 65;
+    while (sprite < 64U && cycle <= 255) {
+        const auto value = oam_[static_cast<std::size_t>(sprite) * 4U + byte];
+        const auto top = static_cast<std::int16_t>(value) + 1;
+        const auto row = static_cast<std::int16_t>(target_scanline - top);
+        const auto in_range = row >= 0 && row < sprite_height;
+
+        if (visible < 8U) {
+            ++sprite;
+            if (in_range) {
+                ++visible;
+                cycle = static_cast<std::int16_t>(cycle + 8);
+            } else {
+                cycle = static_cast<std::int16_t>(cycle + 2);
+            }
+            continue;
+        }
+
+        if (in_range) {
+            return static_cast<std::int16_t>(cycle + 1);
+        }
+        ++sprite;
+        byte = static_cast<std::uint8_t>((byte + 1U) & 0x03U);
+        cycle = static_cast<std::int16_t>(cycle + 2);
+    }
+    return -1;
 }
 
 void Ppu::fetch_sprite_patterns(std::int16_t target_scanline) {
@@ -552,9 +662,8 @@ void Ppu::fetch_sprite_patterns(std::int16_t target_scanline) {
     const auto sprite_16 = (control_ & 0x20U) != 0U;
     for (std::uint8_t index = 0; index < sprite_count_; ++index) {
         const auto& sprite = active_sprites_[index];
-        const auto top = static_cast<std::uint8_t>(sprite.y + 1U);
-        auto row = static_cast<std::int16_t>(
-            target_scanline - static_cast<std::int16_t>(top));
+        const auto top = static_cast<std::int16_t>(sprite.y) + 1;
+        auto row = static_cast<std::int16_t>(target_scanline - top);
         const auto height = static_cast<std::int16_t>(sprite_16 ? 16 : 8);
         if (row < 0 || row >= height) {
             continue;

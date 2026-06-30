@@ -84,6 +84,19 @@ void disabled_rendering_keeps_full_length_frames() {
            "disabled odd frame does not apply the rendering cycle skip");
 }
 
+void odd_frame_skip_latches_rendering_before_the_final_dot() {
+    nes::Ppu ppu;
+    expect(clocks_to_frame(ppu) == 341U * 262U,
+           "disabled even frame establishes odd parity");
+    ppu.clear_frame_complete();
+    clock_until(ppu, -1, 338);
+    ppu.clock();
+    ppu.cpu_write(0x2001, 0x08);
+    ppu.clock();
+    expect(ppu.state().scanline == -1 && ppu.state().cycle == 340,
+           "rendering enabled after the skip sample does not shorten the odd frame");
+}
+
 void status_reads_acknowledge_vertical_blank() {
     nes::Ppu ppu;
     clock_until(ppu, 241, 1);
@@ -96,6 +109,18 @@ void status_reads_acknowledge_vertical_blank() {
            "live PPUSTATUS read returns the vertical blank flag");
     expect((ppu.state().status & 0x80U) == 0U,
            "live PPUSTATUS read acknowledges vertical blank");
+}
+
+void status_reads_at_the_vblank_edge_suppress_the_flag() {
+    nes::Ppu ppu;
+    ppu.cpu_write(0x2000, 0x80);
+    clock_until(ppu, 241, 1);
+    expect((ppu.cpu_read(0x2002) & 0x80U) == 0U,
+           "PPUSTATUS is still clear immediately before the vertical-blank edge");
+    ppu.clock();
+    expect((ppu.state().status & 0x80U) == 0U,
+           "an edge-aligned PPUSTATUS read suppresses vertical blank");
+    expect(!ppu.poll_nmi(), "suppressed vertical blank does not raise NMI");
 }
 
 void system_clock_runs_the_ppu_three_times_faster() {
@@ -116,6 +141,8 @@ void vertical_blank_raises_one_nmi_request() {
     ppu.cpu_write(0x2000, 0x80);
     clock_until(ppu, 241, 1);
     ppu.clock();
+    ppu.clock();
+    ppu.clock();
     expect(ppu.state().nmi_pending, "enabled PPU raises an NMI at vertical blank");
     expect(ppu.poll_nmi(), "PPU exposes its pending NMI to the system bus");
     expect(!ppu.poll_nmi(), "PPU NMI request is consumed exactly once");
@@ -127,6 +154,8 @@ void enabling_nmi_during_vertical_blank_requests_it_immediately() {
     ppu.clock();
     expect(!ppu.state().nmi_pending, "disabled NMI does not fire at vertical blank");
     ppu.cpu_write(0x2000, 0x80);
+    ppu.clock();
+    ppu.clock();
     expect(ppu.state().nmi_pending, "enabling NMI during vertical blank requests one");
 }
 
@@ -150,11 +179,17 @@ void system_bus_delivers_ppu_nmi_to_the_cpu() {
     nes::Bus bus;
     bus.insert_cartridge(nmi_cartridge());
     bus.reset();
+    while (!bus.cpu().instruction_complete()) {
+        bus.clock();
+    }
     bus.cpu_write(0x2000, 0x80);
     clock_until(bus.ppu(), 241, 1);
     bus.clock();
+    for (int count = 0; count < 100 && bus.cpu().state().program_counter != 0x9000; ++count) {
+        bus.clock();
+    }
     expect(bus.cpu().state().program_counter == 0x9000,
-           "system bus delivers the PPU NMI vector to the CPU");
+           "system bus delivers the PPU NMI vector at an instruction boundary");
     expect(bus.cpu().state().stack_pointer == 0xFA,
            "CPU pushes its return state when the PPU raises NMI");
 }
@@ -167,7 +202,9 @@ int run_ppu_timing_tests() {
     vertical_blank_tracks_the_timing_window();
     odd_rendering_frames_skip_one_ppu_clock();
     disabled_rendering_keeps_full_length_frames();
+    odd_frame_skip_latches_rendering_before_the_final_dot();
     status_reads_acknowledge_vertical_blank();
+    status_reads_at_the_vblank_edge_suppress_the_flag();
     system_clock_runs_the_ppu_three_times_faster();
     vertical_blank_raises_one_nmi_request();
     enabling_nmi_during_vertical_blank_requests_it_immediately();

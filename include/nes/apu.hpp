@@ -148,6 +148,10 @@ private:
     bool five_step_mode_ = false;
     bool irq_inhibit_ = false;
     bool frame_irq_ = false;
+    bool frame_write_pending_ = false;
+    bool pending_five_step_mode_ = false;
+    bool pending_irq_inhibit_ = false;
+    std::uint8_t frame_write_delay_ = 0;
     std::array<Pulse, 2> pulse_{};
     Triangle triangle_{};
     Noise noise_{};

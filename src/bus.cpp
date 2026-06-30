@@ -35,20 +35,21 @@ void Bus::reset() {
     dmc_stall_cycles_ = 0;
     controller_shift_.fill(0);
     controller_strobe_ = false;
+    nmi_pending_ = false;
+    nmi_delay_boundaries_ = 0;
 }
 
 void Bus::clock() {
     ppu_.clock();
+    const auto delay_nmi = ppu_.nmi_instruction_delay();
     if (ppu_.poll_nmi()) {
-        cpu_.nmi();
+        nmi_pending_ = true;
+        nmi_delay_boundaries_ = delay_nmi;
     }
     if (system_clock_counter_ % 3U == 0U) {
         apu_.clock();
         dmc_stall_cycles_ = static_cast<std::uint8_t>(
             dmc_stall_cycles_ + apu_.take_cpu_stall_cycles());
-        if (apu_.irq_pending()) {
-            cpu_.irq();
-        }
         if (dma_transfer_) {
             if (dma_dummy_) {
                 if (system_clock_counter_ % 2U == 1U) {
@@ -69,6 +70,18 @@ void Bus::clock() {
         } else if (dmc_stall_cycles_ != 0U) {
             --dmc_stall_cycles_;
         } else {
+            if (cpu_.instruction_complete()) {
+                if (nmi_pending_) {
+                    if (nmi_delay_boundaries_ != 0U) {
+                        --nmi_delay_boundaries_;
+                    } else {
+                        cpu_.nmi();
+                        nmi_pending_ = false;
+                    }
+                } else if (apu_.irq_pending()) {
+                    cpu_.poll_irq();
+                }
+            }
             cpu_.clock();
         }
     }

@@ -55,6 +55,8 @@ private:
     std::array<std::uint8_t, 2> controller_state_{};
     std::array<std::uint8_t, 2> controller_shift_{};
     bool controller_strobe_ = false;
+    bool nmi_pending_ = false;
+    std::uint8_t nmi_delay_boundaries_ = 0;
 };
 
 }  // namespace nes

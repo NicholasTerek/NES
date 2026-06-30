@@ -65,16 +65,16 @@ void reset_preserves_object_memory_but_resets_its_address() {
 void visible_sprites_are_selected_in_oam_order() {
     nes::Ppu ppu;
     hide_all_sprites(ppu);
-    ppu.oam_write(0, 0xFF);
+    ppu.oam_write(0, 0x00);
     ppu.oam_write(1, 3);
     ppu.oam_write(2, 0x01);
     ppu.oam_write(3, 12);
-    ppu.oam_write(4, 0xFF);
+    ppu.oam_write(4, 0x00);
     ppu.oam_write(5, 7);
     ppu.oam_write(6, 0x02);
     ppu.oam_write(7, 24);
     ppu.cpu_write(0x2001, 0x10);
-    clock_until(ppu, -1, 258);
+    clock_until(ppu, 0, 258);
 
     expect(ppu.state().sprite_count == 2, "PPU selects sprites visible on scanline zero");
     expect(ppu.state().sprite_zero_possible, "sprite zero remains identifiable after evaluation");
@@ -88,25 +88,29 @@ void ninth_visible_sprite_sets_overflow() {
     nes::Ppu ppu;
     hide_all_sprites(ppu);
     for (std::uint8_t index = 0; index < 9; ++index) {
-        ppu.oam_write(static_cast<std::uint8_t>(index * 4U), 0xFF);
+        ppu.oam_write(static_cast<std::uint8_t>(index * 4U), 0x00);
     }
     ppu.cpu_write(0x2001, 0x10);
-    clock_until(ppu, -1, 258);
+    clock_until(ppu, 0, 258);
     expect(ppu.state().sprite_count == 8, "scanline cache is limited to eight sprites");
     expect((ppu.state().status & 0x20U) != 0U, "ninth visible sprite sets overflow");
+    hide_all_sprites(ppu);
+    clock_until(ppu, 1, 258);
+    expect((ppu.state().status & 0x20U) != 0U,
+           "sprite overflow remains set until the next pre-render line");
 }
 
 void sprite_patterns_honor_table_and_flip_controls() {
     nes::Ppu ppu;
     hide_all_sprites(ppu);
-    ppu.oam_write(0, 0xFF);
+    ppu.oam_write(0, 0x00);
     ppu.oam_write(1, 2);
     ppu.oam_write(2, 0x40);
     ppu.ppu_write(0x1020, 0x80);
     ppu.ppu_write(0x1028, 0x40);
     ppu.cpu_write(0x2000, 0x08);
     ppu.cpu_write(0x2001, 0x10);
-    clock_until(ppu, -1, 258);
+    clock_until(ppu, 0, 258);
 
     expect(ppu.sprite_pattern_low()[0] == 0x01,
            "horizontal flip reverses the sprite low pattern plane");
@@ -117,13 +121,13 @@ void sprite_patterns_honor_table_and_flip_controls() {
 void vertical_flip_selects_the_opposite_sprite_row() {
     nes::Ppu ppu;
     hide_all_sprites(ppu);
-    ppu.oam_write(0, 0xFF);
+    ppu.oam_write(0, 0x00);
     ppu.oam_write(1, 1);
     ppu.oam_write(2, 0x80);
     ppu.ppu_write(0x0010, 0x11);
     ppu.ppu_write(0x0017, 0x77);
     ppu.cpu_write(0x2001, 0x10);
-    clock_until(ppu, -1, 258);
+    clock_until(ppu, 0, 258);
     expect(ppu.sprite_pattern_low()[0] == 0x77,
            "vertical flip fetches the opposite row of an 8 by 8 sprite");
 }
@@ -131,12 +135,12 @@ void vertical_flip_selects_the_opposite_sprite_row() {
 void sixteen_pixel_sprites_select_the_table_from_the_tile_id() {
     nes::Ppu ppu;
     hide_all_sprites(ppu);
-    ppu.oam_write(0, 0xFF);
+    ppu.oam_write(0, 0x00);
     ppu.oam_write(1, 3);
     ppu.ppu_write(0x1020, 0x5A);
     ppu.cpu_write(0x2000, 0x20);
     ppu.cpu_write(0x2001, 0x10);
-    clock_until(ppu, -1, 258);
+    clock_until(ppu, 0, 258);
     expect(ppu.sprite_pattern_low()[0] == 0x5A,
            "8 by 16 sprites select their pattern table from tile bit zero");
 }
@@ -144,24 +148,24 @@ void sixteen_pixel_sprites_select_the_table_from_the_tile_id() {
 void sixteen_pixel_sprites_fetch_both_tiles_and_flip_vertically() {
     nes::Ppu normal;
     hide_all_sprites(normal);
-    normal.oam_write(0, 0xFF);
+    normal.oam_write(0, 0x00);
     normal.oam_write(1, 2);
     normal.ppu_write(0x0030, 0x6C);
     normal.cpu_write(0x2000, 0x20);
     normal.cpu_write(0x2001, 0x10);
-    clock_until(normal, 7, 258);
+    clock_until(normal, 8, 258);
     expect(normal.sprite_pattern_low()[0] == 0x6C,
            "the lower half of an 8 by 16 sprite uses the following tile");
 
     nes::Ppu flipped;
     hide_all_sprites(flipped);
-    flipped.oam_write(0, 0xFF);
+    flipped.oam_write(0, 0x00);
     flipped.oam_write(1, 2);
     flipped.oam_write(2, 0x80);
     flipped.ppu_write(0x0027, 0xA7);
     flipped.cpu_write(0x2000, 0x20);
     flipped.cpu_write(0x2001, 0x10);
-    clock_until(flipped, 7, 258);
+    clock_until(flipped, 8, 258);
     expect(flipped.sprite_pattern_low()[0] == 0xA7,
            "vertical flip crosses the two tiles of an 8 by 16 sprite");
 }
@@ -169,31 +173,31 @@ void sixteen_pixel_sprites_fetch_both_tiles_and_flip_vertically() {
 void sprite_pixels_render_from_object_memory() {
     nes::Ppu ppu;
     hide_all_sprites(ppu);
-    ppu.oam_write(0, 0xFF);
+    ppu.oam_write(0, 0x00);
     ppu.oam_write(1, 1);
     ppu.oam_write(2, 0x00);
     ppu.oam_write(3, 0);
     ppu.ppu_write(0x0010, 0x80);
     ppu.ppu_write(0x3F11, 0x26);
     ppu.cpu_write(0x2001, 0x14);
-    clock_until(ppu, 0, 2);
-    expect(ppu.pixel(0, 0) == 0x26, "sprite pattern pixel reaches the framebuffer");
+    clock_until(ppu, 1, 2);
+    expect(ppu.pixel(0, 1) == 0x26, "sprite pattern pixel reaches the framebuffer");
 }
 
 void sprite_x_counter_delays_pattern_shifting() {
     nes::Ppu ppu;
     hide_all_sprites(ppu);
-    ppu.oam_write(0, 0xFF);
+    ppu.oam_write(0, 0x00);
     ppu.oam_write(1, 1);
     ppu.oam_write(3, 3);
     ppu.ppu_write(0x0010, 0x80);
     ppu.ppu_write(0x3F00, 0x0F);
     ppu.ppu_write(0x3F11, 0x30);
     ppu.cpu_write(0x2001, 0x14);
-    clock_until(ppu, 0, 5);
+    clock_until(ppu, 1, 5);
 
-    expect(ppu.pixel(2, 0) == 0x0F, "sprite remains transparent before its X coordinate");
-    expect(ppu.pixel(3, 0) == 0x30, "sprite begins rendering at its OAM X coordinate");
+    expect(ppu.pixel(2, 1) == 0x0F, "sprite remains transparent before its X coordinate");
+    expect(ppu.pixel(3, 1) == 0x30, "sprite begins rendering at its OAM X coordinate");
 }
 
 void fill_background(nes::Ppu& ppu, std::uint8_t tile) {
@@ -207,7 +211,7 @@ nes::Ppu layered_pixel_ppu(std::uint8_t sprite_attributes,
     nes::Ppu ppu;
     hide_all_sprites(ppu);
     fill_background(ppu, 1);
-    ppu.oam_write(0, 0xFF);
+    ppu.oam_write(0, 0x00);
     ppu.oam_write(1, 2);
     ppu.oam_write(2, sprite_attributes);
     ppu.oam_write(3, 0);
@@ -223,23 +227,23 @@ nes::Ppu layered_pixel_ppu(std::uint8_t sprite_attributes,
 
 void sprite_priority_selects_foreground_or_background() {
     auto front = layered_pixel_ppu(0x00);
-    clock_until(front, 0, 2);
-    expect(front.pixel(0, 0) == 0x26, "front-priority sprite wins an opaque collision");
+    clock_until(front, 1, 2);
+    expect(front.pixel(0, 1) == 0x26, "front-priority sprite wins an opaque collision");
 
     auto behind = layered_pixel_ppu(0x20);
-    clock_until(behind, 0, 2);
-    expect(behind.pixel(0, 0) == 0x16, "behind-priority sprite yields to opaque background");
+    clock_until(behind, 1, 2);
+    expect(behind.pixel(0, 1) == 0x16, "behind-priority sprite yields to opaque background");
 }
 
 void transparent_sprite_pixels_reveal_the_background() {
     auto ppu = layered_pixel_ppu(0x00, 0x00);
-    clock_until(ppu, 0, 2);
-    expect(ppu.pixel(0, 0) == 0x16, "transparent sprite pixel leaves background visible");
+    clock_until(ppu, 1, 2);
+    expect(ppu.pixel(0, 1) == 0x16, "transparent sprite pixel leaves background visible");
 }
 
 void sprite_zero_collision_sets_the_status_flag() {
     auto ppu = layered_pixel_ppu(0x20);
-    clock_until(ppu, 0, 2);
+    clock_until(ppu, 1, 2);
     expect((ppu.state().status & 0x40U) != 0U,
            "opaque sprite zero collision sets the hit flag regardless of priority");
 }
@@ -251,7 +255,7 @@ void other_sprites_do_not_trigger_sprite_zero_hit() {
     ppu.oam_write(6, ppu.oam_read(2));
     ppu.oam_write(7, ppu.oam_read(3));
     ppu.oam_write(0, 0x80);
-    clock_until(ppu, 0, 2);
+    clock_until(ppu, 1, 2);
     expect((ppu.state().status & 0x40U) == 0U,
            "opaque collision from a later sprite does not set sprite-zero hit");
 }
@@ -259,7 +263,7 @@ void other_sprites_do_not_trigger_sprite_zero_hit() {
 void left_edge_clipping_suppresses_sprite_zero_hit() {
     auto ppu = layered_pixel_ppu(0x00);
     ppu.cpu_write(0x2001, 0x18);
-    clock_until(ppu, 0, 2);
+    clock_until(ppu, 1, 2);
     expect((ppu.state().status & 0x40U) == 0U,
            "clipped left-edge pixels do not trigger sprite-zero hit");
 }

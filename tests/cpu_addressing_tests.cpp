@@ -160,11 +160,67 @@ void stores_cover_every_addressing_mode() {
     }
 }
 
+void indexed_accesses_expose_6502_dummy_bus_cycles() {
+    {
+        FlatMemory memory;
+        memory.set_reset_vector(0x8000);
+        memory.bytes[0x8000] = 0xBD;  // LDA $20F0,X
+        memory.bytes[0x8001] = 0xF0;
+        memory.bytes[0x8002] = 0x20;
+        memory.bytes[0x2102] = 0xA5;
+        Cpu cpu(memory);
+        reset(cpu);
+        cpu.state().x = 0x12;
+        memory.clear_access_log();
+        step(cpu);
+        expect(memory.reads.size() == 5 && memory.reads[3] == 0x2002 &&
+                   memory.reads[4] == 0x2102,
+               "page-crossing indexed loads perform the provisional dummy read");
+    }
+    {
+        FlatMemory memory;
+        memory.set_reset_vector(0x8000);
+        memory.bytes[0x8000] = 0x9D;  // STA $20E0,X
+        memory.bytes[0x8001] = 0xE0;
+        memory.bytes[0x8002] = 0x20;
+        Cpu cpu(memory);
+        reset(cpu);
+        cpu.state().a = 0xA5;
+        cpu.state().x = 0x22;
+        memory.clear_access_log();
+        step(cpu);
+        expect(memory.reads.size() == 4 && memory.reads.back() == 0x2002,
+               "indexed stores always perform a provisional dummy read");
+        expect(memory.writes.size() == 1 && memory.writes.front().first == 0x2102,
+               "indexed stores write only the resolved address");
+    }
+    {
+        FlatMemory memory;
+        memory.set_reset_vector(0x8000);
+        memory.bytes[0x8000] = 0x3E;  // ROL $3FE0,X
+        memory.bytes[0x8001] = 0xE0;
+        memory.bytes[0x8002] = 0x3F;
+        memory.bytes[0x4002] = 0x81;
+        Cpu cpu(memory);
+        reset(cpu);
+        cpu.state().x = 0x22;
+        memory.clear_access_log();
+        step(cpu);
+        expect(memory.reads.size() == 5 && memory.reads[3] == 0x3F02 &&
+                   memory.reads[4] == 0x4002,
+               "indexed mutations read the provisional and resolved addresses");
+        expect(memory.writes.size() == 2 && memory.writes[0].second == 0x81 &&
+                   memory.writes[1].second == 0x02,
+               "memory mutations perform the original-value dummy write");
+    }
+}
+
 }  // namespace
 
 int run_cpu_addressing_tests() {
     const auto before = nes::test::failures;
     loads_cover_every_addressing_mode();
     stores_cover_every_addressing_mode();
+    indexed_accesses_expose_6502_dummy_bus_cycles();
     return nes::test::failures - before;
 }
