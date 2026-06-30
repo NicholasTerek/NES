@@ -188,6 +188,9 @@ void Ppu::ppu_write(std::uint16_t address, std::uint8_t value) {
 
 void Ppu::clock() {
     decay_open_bus();
+    if (cycle_ == 0) {
+        sprite_overflow_cycle_ = -1;
+    }
     if (nmi_delay_clocks_ != 0U) {
         --nmi_delay_clocks_;
         if (nmi_delay_clocks_ == 0U && (control_ & control_enable_nmi) != 0U &&
@@ -213,6 +216,13 @@ void Ppu::clock() {
     }
 
     if (scanline_ >= -1 && scanline_ < 240 && rendering_enabled()) {
+        if (cycle_ == 65) {
+            sprite_overflow_cycle_ = calculate_sprite_overflow_cycle(
+                static_cast<std::int16_t>(scanline_ + 1));
+        }
+        if (cycle_ == sprite_overflow_cycle_) {
+            status_ = static_cast<std::uint8_t>(status_ | status_sprite_overflow);
+        }
         if ((cycle_ >= 2 && cycle_ < 258) || (cycle_ >= 321 && cycle_ < 338)) {
             update_background_shifters();
             if (cycle_ < 258) {
@@ -302,6 +312,7 @@ void Ppu::reset() {
     sprite_x_counters_.fill(0);
     sprite_count_ = 0;
     sprite_zero_possible_ = false;
+    sprite_overflow_cycle_ = -1;
     framebuffer_.fill(0);
 }
 
@@ -578,19 +589,17 @@ void Ppu::evaluate_sprites() {
     active_sprites_.fill({});
     sprite_count_ = 0;
     sprite_zero_possible_ = false;
-    status_ = static_cast<std::uint8_t>(status_ & ~status_sprite_overflow);
 
     const auto target_scanline = static_cast<std::int16_t>(scanline_ + 1);
-    if (target_scanline < 0 || target_scanline >= static_cast<std::int16_t>(screen_height)) {
+    if (target_scanline < 0 || target_scanline > static_cast<std::int16_t>(screen_height)) {
         return;
     }
     const auto sprite_height = static_cast<std::int16_t>((control_ & 0x20U) != 0U ? 16 : 8);
     std::uint8_t visible_count = 0;
     for (std::uint8_t index = 0; index < 64U; ++index) {
         const auto offset = static_cast<std::size_t>(index) * 4U;
-        const auto top = static_cast<std::uint8_t>(oam_[offset] + 1U);
-        const auto row = static_cast<std::int16_t>(
-            target_scanline - static_cast<std::int16_t>(top));
+        const auto top = static_cast<std::int16_t>(oam_[offset]) + 1;
+        const auto row = static_cast<std::int16_t>(target_scanline - top);
         if (row < 0 || row >= sprite_height) {
             continue;
         }
@@ -605,9 +614,44 @@ void Ppu::evaluate_sprites() {
         ++visible_count;
     }
     sprite_count_ = static_cast<std::uint8_t>(visible_count > 8U ? 8U : visible_count);
-    if (visible_count > 8U) {
-        status_ = static_cast<std::uint8_t>(status_ | status_sprite_overflow);
+}
+
+std::int16_t Ppu::calculate_sprite_overflow_cycle(
+    std::int16_t target_scanline) const noexcept {
+    if (target_scanline < 0 || target_scanline > static_cast<std::int16_t>(screen_height)) {
+        return -1;
     }
+
+    const auto sprite_height = static_cast<std::int16_t>((control_ & 0x20U) != 0U ? 16 : 8);
+    std::uint8_t sprite = 0;
+    std::uint8_t byte = 0;
+    std::uint8_t visible = 0;
+    std::int16_t cycle = 65;
+    while (sprite < 64U && cycle <= 255) {
+        const auto value = oam_[static_cast<std::size_t>(sprite) * 4U + byte];
+        const auto top = static_cast<std::int16_t>(value) + 1;
+        const auto row = static_cast<std::int16_t>(target_scanline - top);
+        const auto in_range = row >= 0 && row < sprite_height;
+
+        if (visible < 8U) {
+            ++sprite;
+            if (in_range) {
+                ++visible;
+                cycle = static_cast<std::int16_t>(cycle + 8);
+            } else {
+                cycle = static_cast<std::int16_t>(cycle + 2);
+            }
+            continue;
+        }
+
+        if (in_range) {
+            return static_cast<std::int16_t>(cycle + 1);
+        }
+        ++sprite;
+        byte = static_cast<std::uint8_t>((byte + 1U) & 0x03U);
+        cycle = static_cast<std::int16_t>(cycle + 2);
+    }
+    return -1;
 }
 
 void Ppu::fetch_sprite_patterns(std::int16_t target_scanline) {
@@ -618,9 +662,8 @@ void Ppu::fetch_sprite_patterns(std::int16_t target_scanline) {
     const auto sprite_16 = (control_ & 0x20U) != 0U;
     for (std::uint8_t index = 0; index < sprite_count_; ++index) {
         const auto& sprite = active_sprites_[index];
-        const auto top = static_cast<std::uint8_t>(sprite.y + 1U);
-        auto row = static_cast<std::int16_t>(
-            target_scanline - static_cast<std::int16_t>(top));
+        const auto top = static_cast<std::int16_t>(sprite.y) + 1;
+        auto row = static_cast<std::int16_t>(target_scanline - top);
         const auto height = static_cast<std::int16_t>(sprite_16 ? 16 : 8);
         if (row < 0 || row >= height) {
             continue;

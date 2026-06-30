@@ -90,6 +90,8 @@ private:
     void transfer_scroll_y();
     void render_pixel();
     void evaluate_sprites();
+    [[nodiscard]] std::int16_t calculate_sprite_overflow_cycle(
+        std::int16_t target_scanline) const noexcept;
     void fetch_sprite_patterns(std::int16_t target_scanline);
     void update_sprite_shifters();
     [[nodiscard]] static std::uint8_t reverse_bits(std::uint8_t value) noexcept;
@@ -136,6 +138,7 @@ private:
     std::uint16_t attribute_shift_high_ = 0;
     std::uint8_t sprite_count_ = 0;
     bool sprite_zero_possible_ = false;
+    std::int16_t sprite_overflow_cycle_ = -1;
 };
 
 }  // namespace nes
