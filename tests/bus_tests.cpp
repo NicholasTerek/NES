@@ -235,6 +235,25 @@ void invalid_controller_ports_are_rejected() {
     expect(read_rejected, "the bus rejects invalid controller reads");
 }
 
+void dmc_memory_fetches_stall_cpu_execution() {
+    nes::Bus bus;
+    bus.insert_cartridge(nrom_cartridge());
+    bus.reset();
+    bus.cpu_write(0x4010, 0x0F);
+    bus.cpu_write(0x4012, 0x00);
+    bus.cpu_write(0x4013, 0x00);
+    bus.cpu_write(0x4015, 0x10);
+    const auto cpu_cycles = bus.cpu().state().cycles;
+    for (int clock = 0; clock < 12; ++clock) {
+        bus.clock();
+    }
+    expect(bus.cpu().state().cycles == cpu_cycles,
+           "DMC memory fetch stalls four consecutive CPU slots");
+    bus.clock();
+    expect(bus.cpu().state().cycles == cpu_cycles + 1U,
+           "CPU resumes after the DMC memory stall completes");
+}
+
 void empty_cartridges_are_rejected() {
     nes::Bus bus;
     bool rejected = false;
@@ -280,6 +299,7 @@ int run_bus_tests() {
     controllers_latch_and_shift_both_ports();
     controller_strobe_reports_live_a_button();
     invalid_controller_ports_are_rejected();
+    dmc_memory_fetches_stall_cpu_execution();
     empty_cartridges_are_rejected();
     reset_vector_flows_from_cartridge_to_cpu();
     unmapped_cpu_addresses_have_open_bus_defaults();

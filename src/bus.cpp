@@ -7,7 +7,9 @@
 
 namespace nes {
 
-Bus::Bus() : cpu_(*this) {}
+Bus::Bus() : cpu_(*this) {
+    apu_.set_dmc_reader([this](std::uint16_t address) { return cpu_read(address); });
+}
 
 void Bus::insert_cartridge(std::shared_ptr<Cartridge> cartridge) {
     if (!cartridge) {
@@ -22,6 +24,7 @@ void Bus::reset() {
         cartridge_->reset();
     }
     ppu_.reset();
+    apu_.reset();
     cpu_.reset();
     system_clock_counter_ = 0;
     dma_page_ = 0;
@@ -29,6 +32,7 @@ void Bus::reset() {
     dma_data_ = 0;
     dma_dummy_ = true;
     dma_transfer_ = false;
+    dmc_stall_cycles_ = 0;
     controller_shift_.fill(0);
     controller_strobe_ = false;
 }
@@ -39,6 +43,12 @@ void Bus::clock() {
         cpu_.nmi();
     }
     if (system_clock_counter_ % 3U == 0U) {
+        apu_.clock();
+        dmc_stall_cycles_ = static_cast<std::uint8_t>(
+            dmc_stall_cycles_ + apu_.take_cpu_stall_cycles());
+        if (apu_.irq_pending()) {
+            cpu_.irq();
+        }
         if (dma_transfer_) {
             if (dma_dummy_) {
                 if (system_clock_counter_ % 2U == 1U) {
@@ -56,6 +66,8 @@ void Bus::clock() {
                     dma_dummy_ = true;
                 }
             }
+        } else if (dmc_stall_cycles_ != 0U) {
+            --dmc_stall_cycles_;
         } else {
             cpu_.clock();
         }
@@ -77,6 +89,14 @@ Ppu& Bus::ppu() noexcept {
 
 const Ppu& Bus::ppu() const noexcept {
     return ppu_;
+}
+
+Apu& Bus::apu() noexcept {
+    return apu_;
+}
+
+const Apu& Bus::apu() const noexcept {
+    return apu_;
 }
 
 std::uint64_t Bus::system_clock() const noexcept {
@@ -119,6 +139,9 @@ std::uint8_t Bus::cpu_read(std::uint16_t address, bool read_only) {
     if (address <= 0x3FFFU) {
         return ppu_.cpu_read(static_cast<std::uint16_t>(address & 0x0007U), read_only);
     }
+    if (address == 0x4015U) {
+        return apu_.cpu_read(address, read_only);
+    }
     if (address == 0x4016U || address == 0x4017U) {
         const auto port = static_cast<std::size_t>(address & 0x0001U);
         const auto serial = controller_strobe_ ? controller_state_[port]
@@ -150,6 +173,11 @@ void Bus::cpu_write(std::uint16_t address, std::uint8_t value) {
         dma_address_ = 0;
         dma_transfer_ = true;
         dma_dummy_ = true;
+        return;
+    }
+    if ((address >= 0x4000U && address <= 0x4013U) || address == 0x4015U ||
+        address == 0x4017U) {
+        apu_.cpu_write(address, value);
         return;
     }
     if (address == 0x4016U) {
