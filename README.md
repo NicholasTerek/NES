@@ -4,7 +4,6 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 <img src="https://img.shields.io/badge/Super%20Mario%20Bros.-playable-E52521" alt="Super Mario Bros. playable">
 <img src="https://img.shields.io/badge/Pac--Man-playable-FFD700?labelColor=222222" alt="Pac-Man playable">
-<img src="https://img.shields.io/badge/Duck%20Hunt-playable-62B947" alt="Duck Hunt playable">
 
 <p align="center">
   <img src="media/NES_EMULATOR.svg" alt="NES Emulator" width="100%">
