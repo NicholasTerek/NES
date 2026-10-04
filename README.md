@@ -17,7 +17,7 @@ An NES emulator built from scratch in C++20 that runs real games with graphics, 
 
 ## Architecture
 <p align="center">
-  <img src="media/arc.png" alt="Architecture" width="32%">
+  <img src="media/arch.png" alt="Architecture" width="32%">
 </p>
 TBD
 
