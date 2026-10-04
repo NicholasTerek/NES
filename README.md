@@ -2,12 +2,11 @@
 [![CMake](https://img.shields.io/badge/build-CMake-064F8C?logo=cmake)](CMakeLists.txt)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 
----
-
 <p align="center">
   <img src="media/NES_EMULATOR.svg" alt="NES Emulator" width="100%">
 </p>
 
+---
 <p align="center">
   <img src="media/supermario.gif" alt="Super Mario Bros. gameplay" width="32%">
   <img src="media/pacman.gif" alt="Pac-Man gameplay" width="32%">
