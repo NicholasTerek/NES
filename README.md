@@ -8,8 +8,6 @@
   <img src="media/NES_EMULATOR.svg" alt="NES Emulator" width="100%">
 </p>
 
-## Gameplay
-
 <p align="center">
   <img src="media/supermario.gif" alt="Super Mario Bros. gameplay" width="32%">
   <img src="media/pacman.gif" alt="Pac-Man gameplay" width="32%">
