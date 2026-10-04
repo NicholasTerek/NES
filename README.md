@@ -74,6 +74,7 @@ ctest --test-dir build --output-on-failure
 
 ## Roadmap
 
+- [ ] Add GitHub Actions CI to build the emulator and run tests on pushes and pull requests
 - [ ] Add MMC3 / mapper 4 bank switching and scanline IRQs for games such as
       *Super Mario Bros. 3*, *Kirby's Adventure*, and *Mega Man 3-6*
 - [ ] Persist battery-backed PRG RAM to `.sav` files
