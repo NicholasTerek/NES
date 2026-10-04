@@ -2,6 +2,9 @@
 [![CMake](https://img.shields.io/badge/build-CMake-064F8C?logo=cmake)](CMakeLists.txt)
 [![CI](https://github.com/NicholasTerek/NES/actions/workflows/ci.yml/badge.svg)](https://github.com/NicholasTerek/NES/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
+<img src="https://img.shields.io/badge/Super%20Mario%20Bros.-playable-E52521" alt="Super Mario Bros. playable">
+<img src="https://img.shields.io/badge/Pac--Man-playable-FFD700?labelColor=222222" alt="Pac-Man playable">
+<img src="https://img.shields.io/badge/Duck%20Hunt-playable-62B947" alt="Duck Hunt playable">
 
 <p align="center">
   <img src="media/NES_EMULATOR.svg" alt="NES Emulator" width="100%">
@@ -12,12 +15,6 @@
   <img src="media/supermario.gif" alt="Super Mario Bros. gameplay" width="32%">
   <img src="media/pacman.gif" alt="Pac-Man gameplay" width="32%">
   <img src="media/duckhunt.gif" alt="Duck Hunt gameplay" width="32%">
-</p>
-
-<p align="center">
-  <img src="https://img.shields.io/badge/Super%20Mario%20Bros.-playable-E52521" alt="Super Mario Bros. playable">
-  <img src="https://img.shields.io/badge/Pac--Man-playable-FFD700?labelColor=222222" alt="Pac-Man playable">
-  <img src="https://img.shields.io/badge/Duck%20Hunt-playable-62B947" alt="Duck Hunt playable">
 </p>
 
 An NES emulator built from scratch in C++20 that runs real games with graphics, sound, and keyboard controls. Under the hood, it emulates the central processor (CPU), Picture Processing Unit (PPU), Audio Processing Unit (APU), memory bus, and cartridge mappers.
