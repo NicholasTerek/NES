@@ -4,6 +4,13 @@
 [![CMake](https://img.shields.io/badge/build-CMake-064F8C?logo=cmake)](CMakeLists.txt)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 
+
+<p align="center">
+  <img src="media/supermario.gif" alt="Super Mario Bros. gameplay" width="32%">
+  <img src="media/pacman.gif" alt="Pac-Man gameplay" width="32%">
+  <img src="media/duckhunt.gif" alt="Duck Hunt gameplay" width="32%">
+</p>
+
 A cycle-aware Nintendo Entertainment System emulator written in C++20. It models the
 Ricoh 2A03 CPU, picture and audio processing units, cartridge hardware, DMA, and
 controller input, with both an SDL2 frontend and headless development tools.
