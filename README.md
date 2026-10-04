@@ -1,5 +1,6 @@
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-00599C?logo=c%2B%2B)](https://en.cppreference.com/w/cpp/20)
 [![CMake](https://img.shields.io/badge/build-CMake-064F8C?logo=cmake)](CMakeLists.txt)
+[![CI](https://github.com/NicholasTerek/NES/actions/workflows/ci.yml/badge.svg)](https://github.com/NicholasTerek/NES/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 
 <p align="center">
@@ -80,7 +81,7 @@ ctest --test-dir build --output-on-failure
 
 ## Roadmap
 
-- [ ] Add GitHub Actions CI to build the emulator and run tests on pushes and pull requests
+- [x] Add GitHub Actions CI to build the emulator and run tests on pushes and pull requests
 - [ ] Add MMC3 / mapper 4 bank switching and scanline IRQs for games such as
       *Super Mario Bros. 3*, *Kirby's Adventure*, and *Mega Man 3-6*
 - [ ] Persist battery-backed PRG RAM to `.sav` files
