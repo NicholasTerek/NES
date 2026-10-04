@@ -1,9 +1,14 @@
-# NES Emulator
-
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-00599C?logo=c%2B%2B)](https://en.cppreference.com/w/cpp/20)
 [![CMake](https://img.shields.io/badge/build-CMake-064F8C?logo=cmake)](CMakeLists.txt)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 
+---
+
+<p align="center">
+  <img src="media/NES_EMULATOR.svg" alt="NES Emulator" width="100%">
+</p>
+
+## Gameplay
 
 <p align="center">
   <img src="media/supermario.gif" alt="Super Mario Bros. gameplay" width="32%">
@@ -11,9 +16,7 @@
   <img src="media/duckhunt.gif" alt="Duck Hunt gameplay" width="32%">
 </p>
 
-A cycle-aware Nintendo Entertainment System emulator written in C++20. It models the
-Ricoh 2A03 CPU, picture and audio processing units, cartridge hardware, DMA, and
-controller input, with both an SDL2 frontend and headless development tools.
+An NES emulator built from scratch in C++20 that runs real games with graphics, sound, and keyboard controls. Under the hood, it emulates the central processor (CPU), Picture Processing Unit (PPU), Audio Processing Unit (APU), memory bus, and cartridge mappers.
 
 ## Highlights
 
