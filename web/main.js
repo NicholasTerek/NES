@@ -24,7 +24,14 @@ const stage=document.querySelector("#stage");
 const romInput=document.querySelector("#rom");
 const resetButton=document.querySelector("#reset");
 const status=document.querySelector("#status");
+const infoToggle=document.querySelector("#info-toggle");
+const infoPanel=document.querySelector("#info-panel");
 const view=await createScene(stage,nesCanvas,()=>romInput.click());
+
+infoToggle.addEventListener("click",()=>{
+  const hidden=infoPanel.classList.toggle("hidden");
+  infoToggle.setAttribute("aria-expanded",String(!hidden));
+});
 
 let module,loaded=false,controller=0;
 const call=(name,returnType,argTypes=[],args=[])=>module.ccall(name,returnType,argTypes,args);
