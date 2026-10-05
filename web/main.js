@@ -1,6 +1,8 @@
 import createNesModule from "./nes.js";
 import { createScene } from "./scene.js";
 
+const APP_START=performance.now();
+const DEBUG=new URLSearchParams(location.search).get("debug")==="1";
 const WIDTH=256,HEIGHT=240;
 const NES_FRAME_MS=1000/60.0988;
 const palette=[
@@ -28,6 +30,14 @@ const resetButton=document.querySelector("#reset");
 const status=document.querySelector("#status");
 const infoToggle=document.querySelector("#info-toggle");
 const infoPanel=document.querySelector("#info-panel");
+let debugPanel=null;
+if(DEBUG){
+  debugPanel=document.createElement("pre");
+  debugPanel.className="perf-debug";
+  debugPanel.textContent="Collecting performance data…";
+  document.body.appendChild(debugPanel);
+}
+
 async function openRomPicker(){
   if(!module)return;
   try{await ensureAudio();}catch(error){console.warn("Audio unavailable:",error);}
@@ -145,11 +155,66 @@ try{
 }
 let lastTick=performance.now();
 let emulationAccumulator=0;
+let debugLastUpdate=lastTick;
+let debugCallbacks=0;
+let debugEmulatedFrames=0;
+let debugRenderedFrames=0;
+let debugWindowStart=lastTick;
+const debugFrameTimes=[];
+
+function updateDebugPanel(now){
+  if(!DEBUG||!debugPanel||now-debugLastUpdate<1000)return;
+  const elapsedSeconds=(now-debugWindowStart)/1000;
+  const sorted=[...debugFrameTimes].sort((a,b)=>a-b);
+  const p95=sorted.length?sorted[Math.min(sorted.length-1,Math.floor(sorted.length*0.95))]:0;
+  const average=debugFrameTimes.length?debugFrameTimes.reduce((sum,value)=>sum+value,0)/debugFrameTimes.length:0;
+  const stats=view.getDebugStats();
+  const heap=performance.memory
+    ? `${(performance.memory.usedJSHeapSize/1048576).toFixed(1)} / ${(performance.memory.jsHeapSizeLimit/1048576).toFixed(0)} MB`
+    : "n/a";
+  debugPanel.textContent=[
+    "NES PERF",
+    `callback FPS   ${(debugCallbacks/elapsedSeconds).toFixed(1)}`,
+    `emulation FPS  ${(debugEmulatedFrames/elapsedSeconds).toFixed(1)}`,
+    `render FPS     ${(debugRenderedFrames/elapsedSeconds).toFixed(1)}`,
+    `frame avg/p95  ${average.toFixed(2)} / ${p95.toFixed(2)} ms`,
+    `pixel ratio    ${stats.pixelRatio.toFixed(2)}`,
+    `draw calls     ${stats.calls}`,
+    `triangles      ${stats.triangles.toLocaleString()}`,
+    `geometries     ${stats.geometries}`,
+    `textures       ${stats.textures}`,
+    `JS heap        ${heap}`,
+    `load-to-ready  ${(performance.now()-APP_START).toFixed(0)} ms`,
+    `total renders  ${stats.renders}`,
+  ].join("\n");
+  console.debug("[NES perf]",{
+    callbackFps:debugCallbacks/elapsedSeconds,
+    emulationFps:debugEmulatedFrames/elapsedSeconds,
+    renderFps:debugRenderedFrames/elapsedSeconds,
+    frameAverageMs:average,
+    frameP95Ms:p95,
+    ...stats,
+  });
+  debugCallbacks=0;
+  debugEmulatedFrames=0;
+  debugRenderedFrames=0;
+  debugFrameTimes.length=0;
+  debugWindowStart=now;
+  debugLastUpdate=now;
+}
 
 view.renderer.setAnimationLoop((now)=>{
-  const elapsed=Math.min(now-lastTick,100);
+  const rawElapsed=now-lastTick;
+  const elapsed=Math.min(rawElapsed,100);
   lastTick=now;
   emulationAccumulator+=elapsed;
+  if(DEBUG){
+    debugCallbacks+=1;
+    if(rawElapsed>0&&rawElapsed<250){
+      debugFrameTimes.push(rawElapsed);
+      if(debugFrameTimes.length>240)debugFrameTimes.shift();
+    }
+  }
 
   let frameUpdated=false;
   let catchUpFrames=0;
@@ -157,10 +222,13 @@ view.renderer.setAnimationLoop((now)=>{
     frameUpdated=runNesFrame()||frameUpdated;
     emulationAccumulator-=NES_FRAME_MS;
     catchUpFrames+=1;
+    if(DEBUG)debugEmulatedFrames+=1;
   }
   if(catchUpFrames===3&&emulationAccumulator>=NES_FRAME_MS){
     emulationAccumulator=0;
   }
 
-  view.render(frameUpdated);
+  const rendered=view.render(frameUpdated);
+  if(DEBUG&&rendered)debugRenderedFrames+=1;
+  updateDebugPanel(now);
 });
