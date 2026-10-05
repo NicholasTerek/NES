@@ -12,3 +12,5 @@
 .controls{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin-bottom:.65rem}
 .controls button{font:inherit;border:1px solid #777;background:#272522;color:inherit;padding:.55rem .8rem;cursor:pointer}.controls button:disabled{opacity:.45;cursor:default}
 .status{font-size:.82rem;color:#c9c3b8;margin-bottom:.4rem}.help{font-size:.74rem;color:#bbb;line-height:1.45}
+
+.perf-debug{position:fixed;left:12px;bottom:12px;z-index:90;margin:0;padding:10px 12px;min-width:220px;border:1px solid #ffffff22;background:#08090ce8;color:#d8f7d2;font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;pointer-events:none;white-space:pre;box-shadow:0 8px 24px #0008}
