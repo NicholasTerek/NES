@@ -327,6 +327,7 @@ export async function createScene(stage, nesCanvas, onCartridgeClick) {
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
   let needsRender = true;
+  let renderCount = 0;
   let sampleFrames = 0;
   let sampleTime = 0;
   let lastRenderTime = performance.now();
@@ -397,11 +398,26 @@ export async function createScene(stage, nesCanvas, onCartridgeClick) {
       adaptPixelRatio(now);
       const controlsChanged = controls.update();
 
-      if (!frameUpdated && !controlsChanged && !needsRender) return;
+      if (!frameUpdated && !controlsChanged && !needsRender) return false;
       if (frameUpdated) nesTexture.needsUpdate = true;
 
       renderer.render(scene, camera);
+      renderCount += 1;
       needsRender = false;
+      return true;
+    },
+    getDebugStats() {
+      const info = renderer.info;
+      return {
+        pixelRatio,
+        renders: renderCount,
+        calls: info.render?.calls ?? 0,
+        triangles: info.render?.triangles ?? 0,
+        points: info.render?.points ?? 0,
+        lines: info.render?.lines ?? 0,
+        geometries: info.memory?.geometries ?? 0,
+        textures: info.memory?.textures ?? 0,
+      };
     },
     renderer,
     assetsLoaded,
