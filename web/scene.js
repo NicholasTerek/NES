@@ -10,8 +10,118 @@ function bakedMaterial(color, map = null) {
   return new THREE.MeshBasicMaterial({ color, map, toneMapped: true });
 }
 
-function litMaterial(color, roughness = 0.72, metalness = 0) {
-  return new THREE.MeshStandardMaterial({ color, roughness, metalness });
+function litMaterial(color, roughness = 0.72, metalness = 0, map = null) {
+  return new THREE.MeshStandardMaterial({ color, roughness, metalness, map });
+}
+
+function seededRandom(seed = 0x12345678) {
+  let state = seed >>> 0;
+  return () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return state / 0x100000000;
+  };
+}
+
+function createSurfaceTexture(kind) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 512;
+  canvas.height = 512;
+  const ctx = canvas.getContext("2d");
+  const random = seededRandom(kind === "wall" ? 0x5a17 : kind === "felt" ? 0xf317 : 0x714b);
+
+  if (kind === "wall") {
+    const gradient = ctx.createLinearGradient(0, 0, 0, 512);
+    gradient.addColorStop(0, "#321116");
+    gradient.addColorStop(0.48, "#571d22");
+    gradient.addColorStop(1, "#3a1218");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 512, 512);
+
+    const glow = ctx.createRadialGradient(330, 250, 20, 330, 250, 320);
+    glow.addColorStop(0, "rgba(176,78,52,.28)");
+    glow.addColorStop(0.5, "rgba(120,42,35,.10)");
+    glow.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, 512, 512);
+
+    for (let i = 0; i < 90; ++i) {
+      const x = random() * 512;
+      const y = random() * 512;
+      const radius = 20 + random() * 80;
+      const stain = ctx.createRadialGradient(x, y, 0, x, y, radius);
+      stain.addColorStop(0, `rgba(15,7,8,${0.015 + random() * 0.035})`);
+      stain.addColorStop(1, "rgba(15,7,8,0)");
+      ctx.fillStyle = stain;
+      ctx.fillRect(x - radius, y - radius, radius * 2, radius * 2);
+    }
+
+    for (let i = 0; i < 1800; ++i) {
+      const value = random() > 0.5 ? 255 : 0;
+      ctx.fillStyle = `rgba(${value},${value},${value},${0.008 + random() * 0.018})`;
+      const size = random() < 0.92 ? 1 : 2;
+      ctx.fillRect(random() * 512, random() * 512, size, size);
+    }
+  } else if (kind === "felt") {
+    const gradient = ctx.createLinearGradient(0, 0, 512, 512);
+    gradient.addColorStop(0, "#17352b");
+    gradient.addColorStop(0.55, "#0d281f");
+    gradient.addColorStop(1, "#091d17");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 512, 512);
+
+    for (let i = 0; i < 2600; ++i) {
+      const light = random() > 0.55;
+      ctx.strokeStyle = light
+        ? `rgba(151,184,143,${0.012 + random() * 0.025})`
+        : `rgba(0,0,0,${0.018 + random() * 0.025})`;
+      ctx.lineWidth = 0.6;
+      const x = random() * 512;
+      const y = random() * 512;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + 2 + random() * 7, y + (random() - 0.5) * 3);
+      ctx.stroke();
+    }
+  } else {
+    const gradient = ctx.createLinearGradient(0, 0, 512, 0);
+    gradient.addColorStop(0, "#392216");
+    gradient.addColorStop(0.5, "#56311c");
+    gradient.addColorStop(1, "#321b12");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 512, 512);
+
+    for (let y = 0; y < 512; y += 32) {
+      ctx.fillStyle = "rgba(12,6,4,.22)";
+      ctx.fillRect(0, y, 512, 2);
+      const offset = ((y / 32) % 2) * 128;
+      for (let x = -offset; x < 512; x += 256) {
+        ctx.fillRect(x, y, 2, 32);
+      }
+    }
+
+    for (let i = 0; i < 520; ++i) {
+      const y = random() * 512;
+      const x = random() * 512;
+      const length = 25 + random() * 100;
+      ctx.strokeStyle = `rgba(20,8,3,${0.025 + random() * 0.055})`;
+      ctx.lineWidth = 0.8 + random() * 1.2;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.bezierCurveTo(
+        x + length * 0.3, y + (random() - 0.5) * 6,
+        x + length * 0.7, y + (random() - 0.5) * 6,
+        x + length, y + (random() - 0.5) * 4
+      );
+      ctx.stroke();
+    }
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.anisotropy = 4;
+  return texture;
 }
 
 function addMesh(parent, geometry, material, position) {
@@ -24,31 +134,8 @@ function addMesh(parent, geometry, material, position) {
 }
 
 function createFloorTexture() {
-  const canvas = document.createElement("canvas");
-  canvas.width = 512;
-  canvas.height = 512;
-  const ctx = canvas.getContext("2d");
-  const plankHeight = 32;
-  const colors = ["#633920", "#704227", "#5b321e", "#684028"];
-
-  for (let y = 0; y < canvas.height; y += plankHeight) {
-    ctx.fillStyle = colors[(y / plankHeight) % colors.length];
-    ctx.fillRect(0, y, canvas.width, plankHeight);
-    ctx.fillStyle = "rgba(20,10,6,.18)";
-    ctx.fillRect(0, y, canvas.width, 2);
-
-    const offset = ((y / plankHeight) % 2) * 128;
-    for (let x = -offset; x < canvas.width; x += 256) {
-      ctx.fillRect(x, y, 2, plankHeight);
-    }
-  }
-
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.wrapS = THREE.RepeatWrapping;
-  texture.wrapT = THREE.RepeatWrapping;
-  texture.repeat.set(1.5, 1.15);
-  texture.anisotropy = 4;
+  const texture = createSurfaceTexture("wood");
+  texture.repeat.set(1.7, 1.2);
   return texture;
 }
 
@@ -89,6 +176,10 @@ function addContactShadow(scene, texture, x, z, width, depth, opacity = 1) {
 function buildRoom() {
   const room = new THREE.Group();
   const floorTexture = createFloorTexture();
+  const wallTexture = createSurfaceTexture("wall");
+  const feltTexture = createSurfaceTexture("felt");
+  wallTexture.repeat.set(1.25, 1);
+  feltTexture.repeat.set(2.4, 2.4);
 
   addMesh(
     room,
@@ -100,57 +191,57 @@ function buildRoom() {
   addMesh(
     room,
     new THREE.BoxGeometry(12, 6.1, 0.16),
-    bakedMaterial(0x6a2923),
+    bakedMaterial(0xffffff, wallTexture),
     [0, 3, -3.85]
   );
   addMesh(
     room,
     new THREE.BoxGeometry(0.16, 6.1, 9.3),
-    bakedMaterial(0x501d20),
+    bakedMaterial(0x8f6f78, wallTexture),
     [-6, 3, 0]
   );
 
   addMesh(
     room,
     new THREE.BoxGeometry(12, 0.25, 0.12),
-    bakedMaterial(0xc5ae79),
+    bakedMaterial(0x9b845c),
     [0, 1.03, -3.74]
   );
   addMesh(
     room,
     new THREE.BoxGeometry(0.12, 0.25, 9.1),
-    bakedMaterial(0xb89d6e),
+    bakedMaterial(0x806c4d),
     [-5.90, 1.03, 0]
   );
   addMesh(
     room,
     new THREE.BoxGeometry(12, 0.14, 0.12),
-    bakedMaterial(0x8d7449),
+    bakedMaterial(0x6e5b40),
     [0, 5.82, -3.74]
   );
   addMesh(
     room,
     new THREE.BoxGeometry(0.12, 0.14, 9.1),
-    bakedMaterial(0x806843),
+    bakedMaterial(0x5c4a35),
     [-5.90, 5.82, 0]
   );
 
   addMesh(
     room,
     new THREE.CylinderGeometry(4.35, 4.35, 0.04, 64),
-    bakedMaterial(0x101f1b),
+    bakedMaterial(0x081711),
     [-1.65, 0.025, -0.30]
   );
   addMesh(
     room,
     new THREE.CylinderGeometry(3.65, 3.65, 0.24, 64),
-    litMaterial(0x17352e, 0.84),
+    litMaterial(0xffffff, 0.94, 0, feltTexture),
     [-2.35, 1.18, -1.00]
   );
   addMesh(
     room,
     new THREE.CylinderGeometry(0.70, 1.18, 1.05, 32),
-    bakedMaterial(0x2d2722),
+    bakedMaterial(0x221b18),
     [-2.35, 0.62, -1.00]
   );
 
@@ -266,12 +357,12 @@ export async function createScene(stage, nesCanvas, onCartridgeClick) {
   renderer.setSize(stage.clientWidth, stage.clientHeight);
   renderer.shadowMap.enabled = false;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.18;
+  renderer.toneMappingExposure = 1.12;
   stage.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x080606);
-  scene.fog = new THREE.Fog(0x080606, 10.5, 22);
+  scene.background = new THREE.Color(0x050405);
+  scene.fog = new THREE.Fog(0x050405, 10.5, 22);
   scene.add(buildRoom());
 
   const camera = new THREE.PerspectiveCamera(
@@ -293,13 +384,13 @@ export async function createScene(stage, nesCanvas, onCartridgeClick) {
   controls.minAzimuthAngle = -0.18;
   controls.maxAzimuthAngle = 0.18;
 
-  scene.add(new THREE.HemisphereLight(0xffdfbd, 0x2e2020, 1.55));
+  scene.add(new THREE.HemisphereLight(0xffd6ad, 0x19171d, 1.05));
 
-  const keyLight = new THREE.PointLight(0xffc07a, 58, 18, 2);
+  const keyLight = new THREE.PointLight(0xffbd7a, 42, 18, 2);
   keyLight.position.set(0.0, 3.4, 5.8);
   scene.add(keyLight);
 
-  const fillLight = new THREE.PointLight(0xffb36b, 12, 10, 2);
+  const fillLight = new THREE.PointLight(0x93a8c2, 5.5, 12, 2);
   fillLight.position.set(-2.8, 2.8, 4.8);
   scene.add(fillLight);
 
