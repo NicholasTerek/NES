@@ -127,7 +127,7 @@ function addCrtScreenOverlay(scene, tv, screenMaterial) {
   const size = box.getSize(new THREE.Vector3());
   const center = box.getCenter(new THREE.Vector3());
 
-  const width = size.x * 0.69;
+  const width = size.x * 0.80;
   const height = width * 0.75;
 
   const screen = new THREE.Mesh(
@@ -136,9 +136,9 @@ function addCrtScreenOverlay(scene, tv, screenMaterial) {
   );
 
   screen.position.set(
-    center.x - size.x * 0.01,
-    center.y + size.y * 0.03,
-    box.max.z - 0.015
+    center.x - size.x * 0.005,
+    center.y + size.y * 0.07,
+    box.max.z - 0.02
   );
   screen.rotation.y = tv.rotation.y;
   screen.renderOrder = 10;
