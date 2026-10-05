@@ -1,6 +1,16 @@
 name: WebAssembly
+
 on:
   workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: true
 
 jobs:
   build-web:
@@ -9,9 +19,28 @@ jobs:
       image: emscripten/emsdk:latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Configure
-        run: emcmake cmake -S . -B build-web -DNES_BUILD_TESTS=OFF -DNES_BUILD_SDL=OFF -DNES_BUILD_WEB=ON
+        run: emcmake cmake -S . -B build-web -DNES_BUILD_TESTS=OFF -DNES_BUILD_SDL=OFF -DNES_BUILD_WEB=ON -DCMAKE_BUILD_TYPE=Release
+
       - name: Build
-        run: cmake --build build-web --config Release
+        run: cmake --build build-web --parallel
+
       - name: Check web bundle
         run: test -f build-web/web/index.html && test -f build-web/web/nes.js && test -f build-web/web/nes.wasm
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: build-web/web
+
+  deploy:
+    needs: build-web
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
