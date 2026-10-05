@@ -74,7 +74,7 @@ if(NES_BUILD_WEB)
         "-sEXPORT_ES6=1"
         "-sEXPORT_NAME=createNesModule"
         "-sALLOW_MEMORY_GROWTH=1"
-        "-sEXPORTED_RUNTIME_METHODS=['ccall']"
+        "-sEXPORTED_RUNTIME_METHODS=['ccall','HEAPU8']"
         "-sEXPORTED_FUNCTIONS=['_malloc','_free']"
     )
     add_custom_command(TARGET nes_web POST_BUILD

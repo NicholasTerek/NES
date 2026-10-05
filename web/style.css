@@ -10,5 +10,5 @@
 .info-panel{width:min(420px,88vw);padding:.8rem;border:1px solid #ffffff22;background:#111d;backdrop-filter:blur(12px);box-shadow:0 10px 28px #0007}
 .info-panel.hidden{display:none}
 .controls{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin-bottom:.65rem}
-.rom-picker,.controls button{font:inherit;border:1px solid #777;background:#272522;color:inherit;padding:.55rem .8rem;cursor:pointer}.rom-picker input{display:none}.controls button:disabled{opacity:.45;cursor:default}
+.controls button{font:inherit;border:1px solid #777;background:#272522;color:inherit;padding:.55rem .8rem;cursor:pointer}.controls button:disabled{opacity:.45;cursor:default}
 .status{font-size:.82rem;color:#c9c3b8;margin-bottom:.4rem}.help{font-size:.74rem;color:#bbb;line-height:1.45}
