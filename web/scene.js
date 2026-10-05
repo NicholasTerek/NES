@@ -37,7 +37,7 @@ function buildRoom() {
     room,
     new THREE.BoxGeometry(12, 6.1, 0.16),
     standardMaterial(0x5c211d, 0.94),
-    [0, 3, -4.65]
+    [0, 3, -3.85]
   );
   addMesh(
     room,
@@ -51,7 +51,7 @@ function buildRoom() {
     room,
     new THREE.BoxGeometry(12, 0.25, 0.12),
     standardMaterial(0xc5ae79, 0.82),
-    [0, 1.03, -4.54]
+    [0, 1.03, -3.74]
   );
   addMesh(
     room,
@@ -63,7 +63,7 @@ function buildRoom() {
     room,
     new THREE.BoxGeometry(12, 0.14, 0.12),
     standardMaterial(0x8d7449, 0.86),
-    [0, 5.82, -4.54]
+    [0, 5.82, -3.74]
   );
   addMesh(
     room,
