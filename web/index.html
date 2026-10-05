@@ -3,21 +3,30 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>NES WebAssembly Demo</title>
+  <title>NES</title>
   <link rel="stylesheet" href="./style.css" />
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.webgpu.js",
+        "three/webgpu": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.webgpu.js",
+        "three/tsl": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.tsl.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+      }
+    }
+  </script>
 </head>
 <body>
-  <main>
-    <h1>NES WebAssembly Demo</h1>
-    <p>Load a local iNES ROM. The ROM stays in your browser.</p>
+  <div id="stage"></div>
+  <header class="hud">
+    <div class="title">NES // WebAssembly</div>
     <div class="controls">
       <label class="rom-picker">Load ROM<input id="rom" type="file" accept=".nes,application/octet-stream" /></label>
       <button id="reset" type="button" disabled>Reset</button>
-      <span id="status">Initializing WebAssembly…</span>
+      <span id="status">Initializing…</span>
     </div>
-    <canvas id="screen" width="256" height="240"></canvas>
-    <p class="help">Arrows: D-pad · X: A · Z: B · Enter: Start · Right Shift: Select</p>
-  </main>
+    <div class="help">Arrows · X = A · Z = B · Enter = Start · Right Shift = Select · drag to orbit</div>
+  </header>
   <script type="module" src="./main.js"></script>
 </body>
 </html>
