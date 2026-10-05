@@ -1,6 +1,7 @@
 import * as THREE from "three/webgpu";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
 function material(color, roughness=0.72, metalness=0.0) {
   return new THREE.MeshStandardMaterial({ color, roughness, metalness });
@@ -122,119 +123,6 @@ function addCartridge(parent, position, rotation=[0,0,0], accent=0x8e2e24) {
   return group;
 }
 
-function addController(parent) {
-  const controller=new THREE.Group();
-  controller.position.set(1.95,1.54,.34);
-  controller.rotation.set(-.07,-.34,-.03);
-
-  addMesh(controller,roundedBox(1.72,.22,.73,.08,4),material(0xbcbab3,.72),[0,0,0]);
-
-  addMesh(controller,new THREE.BoxGeometry(.53,.08,.17),material(0x242424,.86),[-.48,.15,0]);
-  addMesh(controller,new THREE.BoxGeometry(.17,.08,.53),material(0x242424,.86),[-.48,.15,0]);
-
-  addMesh(controller,new THREE.CylinderGeometry(.12,.12,.075,24),material(0xa7252d,.55),[.50,.15,-.13],[Math.PI/2,0,0]);
-  addMesh(controller,new THREE.CylinderGeometry(.12,.12,.075,24),material(0xa7252d,.55),[.73,.15,.08],[Math.PI/2,0,0]);
-
-  addMesh(controller,new THREE.BoxGeometry(.24,.055,.08),material(0x4a4743,.75),[-.02,.15,.02]);
-  addMesh(controller,new THREE.BoxGeometry(.24,.055,.08),material(0x4a4743,.75),[.27,.15,.02]);
-
-  parent.add(controller);
-
-  addCable(parent,[
-    [2.58,1.50,.32],
-    [2.95,1.44,.18],
-    [2.68,1.33,-.18],
-    [2.18,1.27,-.36],
-    [1.40,1.31,-.22]
-  ],.022);
-}
-
-function addConsole(parent) {
-  const consoleGroup=new THREE.Group();
-  consoleGroup.position.set(-1.18,1.58,.55);
-  consoleGroup.rotation.y=.08;
-
-  addMesh(consoleGroup,roundedBox(2.55,.60,1.72,.10,4),material(0xc3c1ba,.76),[0,0,0]);
-  addMesh(consoleGroup,new THREE.BoxGeometry(2.02,.13,.99),material(0x3b3a37,.88),[.13,.36,-.16]);
-  addMesh(consoleGroup,new THREE.BoxGeometry(1.86,.052,.54),material(0x161616,.95),[.15,.445,-.18]);
-
-  addMesh(consoleGroup,new THREE.BoxGeometry(.38,.14,.18),material(0x2a2a28,.80),[-.92,-.03,.87]);
-  addMesh(consoleGroup,new THREE.BoxGeometry(.38,.14,.18),material(0x2a2a28,.80),[-.46,-.03,.87]);
-
-  addMesh(
-    consoleGroup,
-    new THREE.BoxGeometry(.08,.08,.028),
-    new THREE.MeshBasicMaterial({color:0xff2e25,toneMapped:false}),
-    [-1.08,.17,.875]
-  );
-
-  const label=makeCanvasTexture((ctx,w,h)=>{
-    ctx.fillStyle="#d4d1c8"; ctx.fillRect(0,0,w,h);
-    ctx.fillStyle="#9b2428"; ctx.font="bold 84px sans-serif"; ctx.fillText("8-BIT",40,110);
-    ctx.fillStyle="#2a2a2a"; ctx.font="36px sans-serif"; ctx.fillText("ENTERTAINMENT SYSTEM",42,170);
-  },512,220);
-
-  const labelMesh=new THREE.Mesh(
-    new THREE.PlaneGeometry(.90,.39),
-    new THREE.MeshBasicMaterial({map:label,toneMapped:false})
-  );
-  labelMesh.position.set(-.63,.07,.873);
-  consoleGroup.add(labelMesh);
-
-  parent.add(consoleGroup);
-
-  addCable(parent,[
-    [-.10,1.52,.66],
-    [.02,1.36,.90],
-    [.22,1.25,1.12],
-    [.65,1.24,1.20]
-  ],.028);
-}
-
-function addCRT(parent, screenMaterial) {
-  const tv=new THREE.Group();
-  tv.position.set(.65,2.85,-1.12);
-  tv.rotation.y=-.035;
-
-  addMesh(tv,roundedBox(3.58,2.86,1.82,.24,7),material(0x171716,.72),[0,0,0]);
-  addMesh(tv,roundedBox(2.89,2.27,.15,.18,6),material(0x2a2a26,.74),[-.18,.06,.92]);
-
-  const glassMat=new THREE.MeshPhysicalMaterial({
-    color:0x304143,
-    roughness:.22,
-    metalness:0,
-    clearcoat:1,
-    clearcoatRoughness:.10,
-    transparent:true,
-    opacity:.24
-  });
-  addMesh(tv,roundedBox(2.58,1.95,.08,.20,7),glassMat,[-.18,.06,1.02]);
-
-  const screen=addMesh(tv,new THREE.PlaneGeometry(2.45,1.83),screenMaterial,[-.18,.06,1.067]);
-  screen.name="CRT_SCREEN";
-
-  // Speaker grille.
-  for(let i=0;i<8;i++){
-    addMesh(tv,new THREE.BoxGeometry(.04,.82,.025),material(0x080808,.96),[1.43,.19,1.00]);
-    tv.children[tv.children.length-1].position.x=1.30+i*.055;
-  }
-
-  addMesh(tv,new THREE.CylinderGeometry(.115,.115,.085,28),material(0x333331,.64),[1.48,-.62,1.00],[Math.PI/2,0,0]);
-  addMesh(tv,new THREE.CylinderGeometry(.090,.090,.085,28),material(0x333331,.64),[1.48,-.89,1.00],[Math.PI/2,0,0]);
-
-  parent.add(tv);
-
-  // Cable disappearing behind the TV.
-  addCable(parent,[
-    [1.42,1.65,-.72],
-    [2.15,1.45,-.18],
-    [2.30,1.26,.12],
-    [1.98,1.18,.42]
-  ],.028);
-
-  return tv;
-}
-
 function addPokeballLikeObject(parent) {
   const group=new THREE.Group();
   group.position.set(3.35,1.62,-.20);
@@ -280,13 +168,6 @@ function buildRoom(screenMaterial) {
   addPoster(room,makeMapPoster(),[-3.45,3.90,-4.54],[0,0,0],[3.15,2.05]);
   addPoster(room,makeBattlePoster(),[2.92,4.24,-4.54],[0,0,0],[3.05,2.00]);
 
-  addCRT(room,screenMaterial);
-  addConsole(room);
-  addController(room);
-
-  addCartridge(room,[-3.05,1.42,.85],[-.05,.22,.10],0x8a3826);
-  addCartridge(room,[-2.62,1.43,.66],[-.08,-.28,-.03],0x423e37);
-  addCartridge(room,[.06,1.43,-.03],[-.05,.10,.04],0x5e2b25);
 
   // Magazine/comic style object on the front right.
   const magazineTexture=makeCanvasTexture((ctx,w,h)=>{
@@ -315,7 +196,94 @@ function buildRoom(screenMaterial) {
   return room;
 }
 
-export async function createScene(stage, nesCanvas) {
+function fitModel(root, targetSize) {
+  const box = new THREE.Box3().setFromObject(root);
+  const size = box.getSize(new THREE.Vector3());
+  const maxAxis = Math.max(size.x, size.y, size.z);
+  if (maxAxis > 0) {
+    const scale = targetSize / maxAxis;
+    root.scale.multiplyScalar(scale);
+  }
+
+  const fitted = new THREE.Box3().setFromObject(root);
+  const center = fitted.getCenter(new THREE.Vector3());
+  root.position.sub(center);
+}
+
+function findScreenMesh(root) {
+  const exact = [];
+  const loose = [];
+
+  root.traverse((object) => {
+    if (!object.isMesh) return;
+    const name = object.name.toLowerCase();
+    if (/(screen|display|tube|glass|crt)/.test(name)) exact.push(object);
+    else if (/(front|panel|monitor|pvm|tv)/.test(name)) loose.push(object);
+  });
+
+  return exact[0] ?? loose[0] ?? null;
+}
+
+async function loadRealAssets(scene, screenMaterial) {
+  const loader = new GLTFLoader();
+
+  const [nesGltf, tvGltf, cartridgeGltf] = await Promise.all([
+    loader.loadAsync("./assets/nes_console_and_controller.glb"),
+    loader.loadAsync("./assets/sony_pvm-14l2_crt_tv.glb"),
+    loader.loadAsync("./assets/nes_cartridge__super_mario_bros.glb"),
+  ]);
+
+  const nes = nesGltf.scene;
+  fitModel(nes, 2.55);
+  nes.position.set(-1.05, 1.56, 0.62);
+  nes.rotation.y = 0.10;
+  nes.traverse((object) => {
+    if (object.isMesh) {
+      object.castShadow = true;
+      object.receiveShadow = true;
+    }
+  });
+  scene.add(nes);
+
+  const tv = tvGltf.scene;
+  fitModel(tv, 3.65);
+  tv.position.set(0.70, 2.92, -1.12);
+  tv.rotation.y = -0.035;
+  tv.traverse((object) => {
+    if (object.isMesh) {
+      object.castShadow = true;
+      object.receiveShadow = true;
+    }
+  });
+
+  const screen = findScreenMesh(tv);
+  if (screen) {
+    screen.material = screenMaterial;
+    screen.material.needsUpdate = true;
+    console.info("Using TV screen mesh:", screen.name || screen.uuid);
+  } else {
+    console.warn("Could not identify a TV screen mesh; keeping the model material.");
+  }
+  scene.add(tv);
+
+  const cartridge = cartridgeGltf.scene;
+  fitModel(cartridge, 1.15);
+  cartridge.position.set(-2.55, 1.73, 0.95);
+  cartridge.rotation.set(-0.16, 0.34, 0.04);
+  cartridge.userData.clickableCartridge = true;
+  cartridge.traverse((object) => {
+    if (object.isMesh) {
+      object.castShadow = true;
+      object.receiveShadow = true;
+      object.userData.clickableCartridge = true;
+    }
+  });
+  scene.add(cartridge);
+
+  return { nes, tv, cartridge, screenFound: Boolean(screen) };
+}
+
+export async function createScene(stage, nesCanvas, onCartridgeClick) {
   const renderer=new THREE.WebGPURenderer({antialias:true});
   await renderer.init();
   renderer.setPixelRatio(Math.min(devicePixelRatio,2));
@@ -323,7 +291,7 @@ export async function createScene(stage, nesCanvas) {
   renderer.shadowMap.enabled=true;
   renderer.shadowMap.type=THREE.PCFSoftShadowMap;
   renderer.toneMapping=THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure=.90;
+  renderer.toneMappingExposure=1.28;
   stage.appendChild(renderer.domElement);
 
   const scene=new THREE.Scene();
@@ -340,16 +308,16 @@ export async function createScene(stage, nesCanvas) {
   controls.maxDistance=15;
   controls.maxPolarAngle=Math.PI*.57;
 
-  const hemi=new THREE.HemisphereLight(0xcaa77c,0x171313,.65);
+  const hemi=new THREE.HemisphereLight(0xffe1bd,0x3a2b28,1.45);
   scene.add(hemi);
 
-  const warm=new THREE.PointLight(0xffa33b,58,13,2);
+  const warm=new THREE.PointLight(0xffb35c,88,15,2);
   warm.position.set(.75,4.78,-3.65);
   warm.castShadow=true;
   warm.shadow.mapSize.set(1024,1024);
   scene.add(warm);
 
-  const fill=new THREE.PointLight(0x6e87c7,16,10,2);
+  const fill=new THREE.PointLight(0xa9baf0,30,12,2);
   fill.position.set(-4.5,3.7,3.6);
   scene.add(fill);
 
@@ -365,6 +333,39 @@ export async function createScene(stage, nesCanvas) {
   });
 
   scene.add(buildRoom(screenMaterial));
+
+  let assetsLoaded = false;
+  let cartridge = null;
+  try {
+    const assets = await loadRealAssets(scene, screenMaterial);
+    cartridge = assets.cartridge;
+    assetsLoaded = true;
+  } catch (error) {
+    console.error("Could not load GLB assets:", error);
+  }
+
+  const raycaster = new THREE.Raycaster();
+  const pointer = new THREE.Vector2();
+
+  function cartridgeHit(event) {
+    if (!cartridge) return false;
+    const rect = renderer.domElement.getBoundingClientRect();
+    pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(pointer, camera);
+    return raycaster.intersectObject(cartridge, true).length > 0;
+  }
+
+  renderer.domElement.addEventListener("pointermove", (event) => {
+    renderer.domElement.style.cursor = cartridgeHit(event) ? "pointer" : "grab";
+  });
+
+  renderer.domElement.addEventListener("click", (event) => {
+    if (cartridgeHit(event)) {
+      event.stopPropagation();
+      onCartridgeClick?.();
+    }
+  });
 
   const resize=()=>{
     const width=stage.clientWidth;
@@ -382,5 +383,6 @@ export async function createScene(stage, nesCanvas) {
       renderer.render(scene,camera);
     },
     renderer,
+    assetsLoaded,
   };
 }
