@@ -22,11 +22,18 @@ ctx.fillStyle="#050505"; ctx.fillRect(0,0,WIDTH,HEIGHT);
 
 const stage=document.querySelector("#stage");
 const romInput=document.querySelector("#rom");
+const loadRomButton=document.querySelector("#load-rom");
 const resetButton=document.querySelector("#reset");
 const status=document.querySelector("#status");
 const infoToggle=document.querySelector("#info-toggle");
 const infoPanel=document.querySelector("#info-panel");
-const view=await createScene(stage,nesCanvas,()=>romInput.click());
+function openRomPicker(){
+  if(!module)return;
+  romInput.value="";
+  romInput.click();
+}
+
+const view=await createScene(stage,nesCanvas,openRomPicker);
 
 infoToggle.addEventListener("click",()=>{
   const hidden=infoPanel.classList.toggle("hidden");
@@ -59,19 +66,39 @@ function runNesFrame(){
 addEventListener("keydown",e=>{if(keys.has(e.code)){e.preventDefault();setKey(e.code,true);}});
 addEventListener("keyup",e=>{if(keys.has(e.code)){e.preventDefault();setKey(e.code,false);}});
 
+loadRomButton.addEventListener("click",openRomPicker);
+
 romInput.addEventListener("change",async()=>{
-  const file=romInput.files?.[0]; if(!file)return;
-  const bytes=new Uint8Array(await file.arrayBuffer());
-  const ptr=module._malloc(bytes.length);
+  const file=romInput.files?.[0]; if(!file||!module)return;
   try{
-    module.HEAPU8.set(bytes,ptr);
-    loaded=call("nes_load_rom","number",["number","number"],[ptr,bytes.length])===1;
+    const bytes=new Uint8Array(await file.arrayBuffer());
+    const ptr=module._malloc(bytes.length);
+    try{
+      module.HEAPU8.set(bytes,ptr);
+      loaded=call("nes_load_rom","number",["number","number"],[ptr,bytes.length])===1;
+    }finally{
+      module._free(ptr);
+    }
     resetButton.disabled=!loaded;
-    status.textContent=loaded?`Playing ${file.name}`:"Could not load this ROM.";
-  }finally{module._free(ptr);}
+    status.textContent=loaded?`Playing ${file.name}`:`Could not load ${file.name}`;
+  }catch(error){
+    loaded=false;
+    resetButton.disabled=true;
+    status.textContent=`ROM load failed: ${error?.message ?? error}`;
+    console.error("ROM load failed:",error);
+  }
 });
 resetButton.addEventListener("click",()=>{if(loaded)call("nes_reset",null);});
 
-module=await createNesModule();
-status.textContent=view.assetsLoaded?"Ready · click the cartridge to load a ROM":"Ready · room loaded; asset load failed";
+try{
+  module=await createNesModule({
+    locateFile:path=>new URL(path,import.meta.url).href,
+  });
+  loadRomButton.disabled=false;
+  status.textContent=view.assetsLoaded?"Ready · click the cartridge or Load ROM":"Ready · room loaded; asset load failed";
+}catch(error){
+  status.textContent=`Emulator failed to initialize: ${error?.message ?? error}`;
+  console.error("Emulator initialization failed:",error);
+  throw error;
+}
 view.renderer.setAnimationLoop(()=>{runNesFrame();view.render();});
