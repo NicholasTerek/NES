@@ -1,8 +1,14 @@
 :root{color-scheme:dark;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:#080706;color:#f4f1ea}
 *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden}body{background:#080706}
 #stage{position:fixed;inset:0}#stage canvas{display:block;width:100%;height:100%}
-.hud{position:fixed;top:1rem;left:1rem;right:1rem;pointer-events:none;display:flex;flex-direction:column;gap:.55rem;align-items:flex-start}
-.title{font-weight:700;letter-spacing:.12em;text-shadow:0 2px 12px #000}
-.controls{pointer-events:auto;display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;background:#111b;padding:.55rem;border:1px solid #ffffff22;backdrop-filter:blur(8px)}
-.rom-picker,button{font:inherit;border:1px solid #777;background:#272522;color:inherit;padding:.55rem .8rem;cursor:pointer}.rom-picker input{display:none}button:disabled{opacity:.45;cursor:default}
-#status{font-size:.82rem;color:#c9c3b8}.help{font-size:.74rem;color:#bbb;text-shadow:0 2px 10px #000}
+.top-fade{position:fixed;inset:0 0 auto 0;height:190px;z-index:10;pointer-events:none;background:linear-gradient(to bottom,rgba(0,0,0,.86) 0%,rgba(0,0,0,.60) 35%,rgba(0,0,0,.24) 68%,rgba(0,0,0,0) 100%)}
+.hud{position:fixed;top:1rem;left:1rem;right:1rem;z-index:20;display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none}
+.title{font-weight:700;letter-spacing:.12em;text-shadow:0 2px 12px #000;pointer-events:none}
+.hud-menu{position:relative;display:flex;flex-direction:column;align-items:flex-end;gap:.7rem;pointer-events:auto}
+.info-toggle{width:50px;height:50px;border-radius:50%;border:1px solid #ffffff55;background:#111c;color:#f4f1ea;font:700 1.25rem/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;cursor:pointer;backdrop-filter:blur(10px);box-shadow:0 8px 24px #0006;padding:0}
+.info-toggle:hover{background:#24211ecc}.info-toggle:focus-visible{outline:2px solid #f4f1ea;outline-offset:3px}
+.info-panel{width:min(420px,88vw);padding:.8rem;border:1px solid #ffffff22;background:#111d;backdrop-filter:blur(12px);box-shadow:0 10px 28px #0007}
+.info-panel.hidden{display:none}
+.controls{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin-bottom:.65rem}
+.rom-picker,.controls button{font:inherit;border:1px solid #777;background:#272522;color:inherit;padding:.55rem .8rem;cursor:pointer}.rom-picker input{display:none}.controls button:disabled{opacity:.45;cursor:default}
+.status{font-size:.82rem;color:#c9c3b8;margin-bottom:.4rem}.help{font-size:.74rem;color:#bbb;line-height:1.45}
