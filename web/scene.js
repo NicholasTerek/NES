@@ -157,24 +157,24 @@ async function loadAssets(scene, screenMaterial) {
   ]);
 
   const nes = nesGltf.scene;
-  fitModel(nes, 2.45);
-  nes.rotation.y = -0.42;
-  placeByBottomCenter(nes, 1.45, TABLE_TOP_Y, -0.15);
+  fitModel(nes, 2.30);
+  nes.rotation.set(0, 0, 0);
+  placeByBottomCenter(nes, 1.55, TABLE_TOP_Y, -0.35);
   enableShadows(nes);
   scene.add(nes);
 
   const tv = tvGltf.scene;
-  fitModel(tv, 3.35);
-  tv.rotation.y = 0.12;
-  placeByBottomCenter(tv, 0.00, TABLE_TOP_Y, -1.55);
+  fitModel(tv, 3.25);
+  tv.rotation.set(0, 0, 0);
+  placeByBottomCenter(tv, 0.00, TABLE_TOP_Y, -1.70);
   enableShadows(tv);
   scene.add(tv);
   addCrtScreenOverlay(scene, tv, screenMaterial);
 
   const cartridge = cartridgeGltf.scene;
-  fitModel(cartridge, 1.10);
-  cartridge.rotation.set(-0.12, 0.60, 0.03);
-  placeByBottomCenter(cartridge, -1.75, TABLE_TOP_Y, -0.10);
+  fitModel(cartridge, 1.05);
+  cartridge.rotation.set(-0.04, 0, 0);
+  placeByBottomCenter(cartridge, -1.75, TABLE_TOP_Y, -0.30);
   enableShadows(cartridge);
   scene.add(cartridge);
 
@@ -204,18 +204,18 @@ export async function createScene(stage, nesCanvas, onCartridgeClick) {
     0.05,
     100
   );
-  camera.position.set(5.90, 4.25, 5.90);
+  camera.position.set(0.00, 2.55, 6.20);
 
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.enablePan = false;
-  controls.target.set(0.00, 2.05, -1.10);
-  controls.minDistance = 5.2;
-  controls.maxDistance = 9.2;
-  controls.minPolarAngle = 0.95;
-  controls.maxPolarAngle = 1.20;
-  controls.minAzimuthAngle = 0.35;
-  controls.maxAzimuthAngle = 1.10;
+  controls.target.set(0.00, 1.95, -1.05);
+  controls.minDistance = 5.6;
+  controls.maxDistance = 7.4;
+  controls.minPolarAngle = 1.38;
+  controls.maxPolarAngle = 1.50;
+  controls.minAzimuthAngle = -0.18;
+  controls.maxAzimuthAngle = 0.18;
 
   scene.add(new THREE.HemisphereLight(0xffe1bd, 0x3a2b28, 1.45));
 
