@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>NES WebAssembly Demo</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <main>
+    <h1>NES WebAssembly Demo</h1>
+    <p>Load a local iNES ROM. The ROM stays in your browser.</p>
+    <div class="controls">
+      <label class="rom-picker">Load ROM<input id="rom" type="file" accept=".nes,application/octet-stream" /></label>
+      <button id="reset" type="button" disabled>Reset</button>
+      <span id="status">Initializing WebAssembly…</span>
+    </div>
+    <canvas id="screen" width="256" height="240"></canvas>
+    <p class="help">Arrows: D-pad · X: A · Z: B · Enter: Start · Right Shift: Select</p>
+  </main>
+  <script type="module" src="./main.js"></script>
+</body>
+</html>
