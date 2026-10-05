@@ -8,6 +8,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(NES_BUILD_TESTS "Build the emulator test suite" ON)
 option(NES_BUILD_SDL "Build the SDL2 frontend when SDL2 is available" ON)
+option(NES_BUILD_WEB "Build the WebAssembly frontend with Emscripten" OFF)
 
 add_library(nes_core
     src/apu.cpp
@@ -54,6 +55,33 @@ if(NES_BUILD_SDL)
             target_link_libraries(nes_sdl PRIVATE ${SDL2_LIBRARIES})
         endif()
     endif()
+endif()
+
+if(NES_BUILD_WEB)
+    if(NOT EMSCRIPTEN)
+        message(FATAL_ERROR "NES_BUILD_WEB requires Emscripten (configure with emcmake).")
+    endif()
+
+    add_executable(nes_web web/wasm/nes_web.cpp)
+    target_link_libraries(nes_web PRIVATE nes_core)
+    set_target_properties(nes_web PROPERTIES
+        OUTPUT_NAME "nes"
+        SUFFIX ".js"
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/web"
+    )
+    target_link_options(nes_web PRIVATE
+        "-sMODULARIZE=1"
+        "-sEXPORT_ES6=1"
+        "-sEXPORT_NAME=createNesModule"
+        "-sALLOW_MEMORY_GROWTH=1"
+        "-sEXPORTED_RUNTIME_METHODS=['ccall']"
+        "-sEXPORTED_FUNCTIONS=['_malloc','_free']"
+    )
+    add_custom_command(TARGET nes_web POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_SOURCE_DIR}/web/index.html" "${CMAKE_BINARY_DIR}/web/index.html"
+        COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_SOURCE_DIR}/web/main.js" "${CMAKE_BINARY_DIR}/web/main.js"
+        COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_SOURCE_DIR}/web/style.css" "${CMAKE_BINARY_DIR}/web/style.css"
+    )
 endif()
 
 if(NES_BUILD_TESTS)

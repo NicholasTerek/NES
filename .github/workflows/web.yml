@@ -1,0 +1,18 @@
+name: WebAssembly
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  build-web:
+    runs-on: ubuntu-latest
+    container:
+      image: emscripten/emsdk:latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: emcmake cmake -S . -B build-web -DNES_BUILD_TESTS=OFF -DNES_BUILD_SDL=OFF -DNES_BUILD_WEB=ON
+      - name: Build
+        run: cmake --build build-web --config Release
+      - name: Check web bundle
+        run: test -f build-web/web/index.html && test -f build-web/web/nes.js && test -f build-web/web/nes.wasm

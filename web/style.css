@@ -1,0 +1,6 @@
+:root{color-scheme:dark;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:#101010;color:#f4f4f4}
+*{box-sizing:border-box} body{margin:0;min-height:100vh;display:grid;place-items:center}
+main{width:min(92vw,860px);text-align:center}.controls{display:flex;flex-wrap:wrap;gap:.75rem;justify-content:center;align-items:center;margin:1.5rem 0}
+.rom-picker,button{border:1px solid #777;background:#222;color:inherit;padding:.6rem .9rem;cursor:pointer}.rom-picker input{display:none}
+button:disabled{opacity:.45;cursor:default}#screen{width:min(768px,92vw);aspect-ratio:256/240;image-rendering:pixelated;background:#000;border:10px solid #272727;box-shadow:0 12px 50px #000}
+.help{color:#aaa;font-size:.9rem}
