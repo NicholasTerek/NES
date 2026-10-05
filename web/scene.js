@@ -72,24 +72,24 @@ function buildRoom() {
     [-5.90, 5.82, 0]
   );
 
-  // Circular rug/platform and table.
+  // Circular rug/platform and table, pushed back toward the rear wall.
   addMesh(
     room,
     new THREE.CylinderGeometry(4.35, 4.35, 0.04, 80),
     standardMaterial(0x101f1b, 0.96),
-    [0, 0.025, 0.40]
+    [0, 0.025, -0.80]
   );
   addMesh(
     room,
     new THREE.CylinderGeometry(3.65, 3.65, 0.24, 80),
     standardMaterial(0x17352e, 0.78),
-    [0, 1.18, 0.35]
+    [0, 1.18, -0.85]
   );
   addMesh(
     room,
     new THREE.CylinderGeometry(0.70, 1.18, 1.05, 40),
     standardMaterial(0x2d2722, 0.90),
-    [0, 0.62, 0.35]
+    [0, 0.62, -0.85]
   );
 
   return room;
@@ -127,7 +127,7 @@ function addCrtScreenOverlay(scene, tv, screenMaterial) {
   const size = box.getSize(new THREE.Vector3());
   const center = box.getCenter(new THREE.Vector3());
 
-  const width = size.x * 0.62;
+  const width = size.x * 0.69;
   const height = width * 0.75;
 
   const screen = new THREE.Mesh(
@@ -136,9 +136,9 @@ function addCrtScreenOverlay(scene, tv, screenMaterial) {
   );
 
   screen.position.set(
-    center.x - size.x * 0.055,
-    center.y + size.y * 0.06,
-    box.max.z + 0.018
+    center.x - size.x * 0.01,
+    center.y + size.y * 0.03,
+    box.max.z - 0.015
   );
   screen.rotation.y = tv.rotation.y;
   screen.renderOrder = 10;
@@ -157,24 +157,24 @@ async function loadAssets(scene, screenMaterial) {
   ]);
 
   const nes = nesGltf.scene;
-  fitModel(nes, 2.55);
-  nes.rotation.y = 0.10;
-  placeByBottomCenter(nes, -1.05, TABLE_TOP_Y, 0.62);
+  fitModel(nes, 2.45);
+  nes.rotation.y = -0.42;
+  placeByBottomCenter(nes, 1.45, TABLE_TOP_Y, -0.15);
   enableShadows(nes);
   scene.add(nes);
 
   const tv = tvGltf.scene;
-  fitModel(tv, 3.65);
-  tv.rotation.y = -0.035;
-  placeByBottomCenter(tv, 0.70, TABLE_TOP_Y, -1.12);
+  fitModel(tv, 3.35);
+  tv.rotation.y = 0.12;
+  placeByBottomCenter(tv, 0.00, TABLE_TOP_Y, -1.55);
   enableShadows(tv);
   scene.add(tv);
   addCrtScreenOverlay(scene, tv, screenMaterial);
 
   const cartridge = cartridgeGltf.scene;
-  fitModel(cartridge, 1.15);
-  cartridge.rotation.set(-0.16, 0.34, 0.04);
-  placeByBottomCenter(cartridge, -2.55, TABLE_TOP_Y, 0.95);
+  fitModel(cartridge, 1.10);
+  cartridge.rotation.set(-0.12, 0.60, 0.03);
+  placeByBottomCenter(cartridge, -1.75, TABLE_TOP_Y, -0.10);
   enableShadows(cartridge);
   scene.add(cartridge);
 
@@ -204,14 +204,18 @@ export async function createScene(stage, nesCanvas, onCartridgeClick) {
     0.05,
     100
   );
-  camera.position.set(7.35, 4.65, 7.70);
+  camera.position.set(5.90, 4.25, 5.90);
 
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
-  controls.target.set(0.20, 2.15, -0.40);
-  controls.minDistance = 3.3;
-  controls.maxDistance = 15;
-  controls.maxPolarAngle = Math.PI * 0.57;
+  controls.enablePan = false;
+  controls.target.set(0.00, 2.05, -1.10);
+  controls.minDistance = 5.2;
+  controls.maxDistance = 9.2;
+  controls.minPolarAngle = 0.95;
+  controls.maxPolarAngle = 1.20;
+  controls.minAzimuthAngle = 0.35;
+  controls.maxAzimuthAngle = 1.10;
 
   scene.add(new THREE.HemisphereLight(0xffe1bd, 0x3a2b28, 1.45));
 
