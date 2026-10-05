@@ -3,92 +3,154 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
 const TABLE_TOP_Y = 1.31;
+const MIN_PIXEL_RATIO = 1;
+const MAX_PIXEL_RATIO = 1.6;
 
-function standardMaterial(color, roughness = 0.72, metalness = 0) {
+function bakedMaterial(color, map = null) {
+  return new THREE.MeshBasicMaterial({ color, map, toneMapped: true });
+}
+
+function litMaterial(color, roughness = 0.72, metalness = 0) {
   return new THREE.MeshStandardMaterial({ color, roughness, metalness });
 }
 
-function addMesh(parent, geometry, meshMaterial, position) {
-  const mesh = new THREE.Mesh(geometry, meshMaterial);
+function addMesh(parent, geometry, material, position) {
+  const mesh = new THREE.Mesh(geometry, material);
   mesh.position.set(...position);
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
+  mesh.castShadow = false;
+  mesh.receiveShadow = false;
   parent.add(mesh);
   return mesh;
 }
 
-function buildRoom() {
-  const room = new THREE.Group();
+function createFloorTexture() {
+  const canvas = document.createElement("canvas");
+  canvas.width = 512;
+  canvas.height = 512;
+  const ctx = canvas.getContext("2d");
+  const plankHeight = 32;
+  const colors = ["#633920", "#704227", "#5b321e", "#684028"];
 
-  // Wood floor.
-  for (let i = 0; i < 26; ++i) {
-    const z = -4.7 + i * 0.38;
-    const color = [0x633920, 0x704227, 0x5b321e][i % 3];
-    addMesh(
-      room,
-      new THREE.BoxGeometry(12, 0.07, 0.35),
-      standardMaterial(color, 0.80),
-      [0, -0.035, z]
-    );
+  for (let y = 0; y < canvas.height; y += plankHeight) {
+    ctx.fillStyle = colors[(y / plankHeight) % colors.length];
+    ctx.fillRect(0, y, canvas.width, plankHeight);
+    ctx.fillStyle = "rgba(20,10,6,.18)";
+    ctx.fillRect(0, y, canvas.width, 2);
+
+    const offset = ((y / plankHeight) % 2) * 128;
+    for (let x = -offset; x < canvas.width; x += 256) {
+      ctx.fillRect(x, y, 2, plankHeight);
+    }
   }
 
-  // Corner walls.
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(1.5, 1.15);
+  texture.anisotropy = 4;
+  return texture;
+}
+
+function createContactShadowTexture() {
+  const canvas = document.createElement("canvas");
+  canvas.width = 128;
+  canvas.height = 128;
+  const ctx = canvas.getContext("2d");
+  const gradient = ctx.createRadialGradient(64, 64, 8, 64, 64, 62);
+  gradient.addColorStop(0, "rgba(0,0,0,.42)");
+  gradient.addColorStop(0.45, "rgba(0,0,0,.22)");
+  gradient.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, 128, 128);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+function addContactShadow(scene, texture, x, z, width, depth, opacity = 1) {
+  const shadow = new THREE.Mesh(
+    new THREE.PlaneGeometry(width, depth),
+    new THREE.MeshBasicMaterial({
+      map: texture,
+      transparent: true,
+      opacity,
+      depthWrite: false,
+      toneMapped: false,
+    })
+  );
+  shadow.rotation.x = -Math.PI / 2;
+  shadow.position.set(x, TABLE_TOP_Y + 0.008, z);
+  shadow.renderOrder = 2;
+  scene.add(shadow);
+}
+
+function buildRoom() {
+  const room = new THREE.Group();
+  const floorTexture = createFloorTexture();
+
+  addMesh(
+    room,
+    new THREE.BoxGeometry(12, 0.07, 10),
+    bakedMaterial(0xffffff, floorTexture),
+    [0, -0.035, 0]
+  );
+
   addMesh(
     room,
     new THREE.BoxGeometry(12, 6.1, 0.16),
-    standardMaterial(0x5c211d, 0.94),
+    bakedMaterial(0x6a2923),
     [0, 3, -3.85]
   );
   addMesh(
     room,
     new THREE.BoxGeometry(0.16, 6.1, 9.3),
-    standardMaterial(0x45171a, 0.95),
+    bakedMaterial(0x501d20),
     [-6, 3, 0]
   );
 
-  // Baseboards and upper trim.
   addMesh(
     room,
     new THREE.BoxGeometry(12, 0.25, 0.12),
-    standardMaterial(0xc5ae79, 0.82),
+    bakedMaterial(0xc5ae79),
     [0, 1.03, -3.74]
   );
   addMesh(
     room,
     new THREE.BoxGeometry(0.12, 0.25, 9.1),
-    standardMaterial(0xc5ae79, 0.82),
+    bakedMaterial(0xb89d6e),
     [-5.90, 1.03, 0]
   );
   addMesh(
     room,
     new THREE.BoxGeometry(12, 0.14, 0.12),
-    standardMaterial(0x8d7449, 0.86),
+    bakedMaterial(0x8d7449),
     [0, 5.82, -3.74]
   );
   addMesh(
     room,
     new THREE.BoxGeometry(0.12, 0.14, 9.1),
-    standardMaterial(0x8d7449, 0.86),
+    bakedMaterial(0x806843),
     [-5.90, 5.82, 0]
   );
 
-  // Table assembly tucked into the back-left corner so its circular edge disappears into the walls.
   addMesh(
     room,
-    new THREE.CylinderGeometry(4.35, 4.35, 0.04, 80),
-    standardMaterial(0x101f1b, 0.96),
+    new THREE.CylinderGeometry(4.35, 4.35, 0.04, 64),
+    bakedMaterial(0x101f1b),
     [-1.65, 0.025, -0.30]
   );
   addMesh(
     room,
-    new THREE.CylinderGeometry(3.65, 3.65, 0.24, 80),
-    standardMaterial(0x17352e, 0.78),
+    new THREE.CylinderGeometry(3.65, 3.65, 0.24, 64),
+    litMaterial(0x17352e, 0.84),
     [-2.35, 1.18, -1.00]
   );
   addMesh(
     room,
-    new THREE.CylinderGeometry(0.70, 1.18, 1.05, 40),
-    standardMaterial(0x2d2722, 0.90),
+    new THREE.CylinderGeometry(0.70, 1.18, 1.05, 32),
+    bakedMaterial(0x2d2722),
     [-2.35, 0.62, -1.00]
   );
 
@@ -114,11 +176,18 @@ function placeByBottomCenter(root, x, y, z) {
   root.position.z += z - center.z;
 }
 
-function enableShadows(root) {
+function optimizeModel(root) {
   root.traverse((object) => {
     if (!object.isMesh) return;
-    object.castShadow = true;
-    object.receiveShadow = true;
+    object.castShadow = false;
+    object.receiveShadow = false;
+    object.frustumCulled = true;
+
+    const materials = Array.isArray(object.material) ? object.material : [object.material];
+    for (const material of materials) {
+      if (!material) continue;
+      material.needsUpdate = true;
+    }
   });
 }
 
@@ -126,15 +195,10 @@ function addCrtScreenOverlay(scene, tv, screenMaterial) {
   const box = new THREE.Box3().setFromObject(tv);
   const size = box.getSize(new THREE.Vector3());
   const center = box.getCenter(new THREE.Vector3());
-
   const width = size.x * 0.80;
   const height = width * 0.75;
 
-  const screen = new THREE.Mesh(
-    new THREE.PlaneGeometry(width, height),
-    screenMaterial
-  );
-
+  const screen = new THREE.Mesh(new THREE.PlaneGeometry(width, height), screenMaterial);
   screen.position.set(
     center.x - size.x * 0.005,
     center.y + size.y * 0.07,
@@ -142,13 +206,12 @@ function addCrtScreenOverlay(scene, tv, screenMaterial) {
   );
   screen.rotation.y = tv.rotation.y;
   screen.renderOrder = 10;
-  screen.castShadow = false;
-  screen.receiveShadow = false;
   scene.add(screen);
 }
 
 async function loadAssets(scene, screenMaterial) {
   const loader = new GLTFLoader();
+  const shadowTexture = createContactShadowTexture();
 
   const [nesGltf, tvGltf, cartridgeGltf] = await Promise.all([
     loader.loadAsync("./assets/nes_console_and_controller.glb"),
@@ -160,37 +223,50 @@ async function loadAssets(scene, screenMaterial) {
   fitModel(nes, 2.15);
   nes.rotation.set(0, 0, 0);
   placeByBottomCenter(nes, -0.25, TABLE_TOP_Y, -0.60);
-  enableShadows(nes);
+  optimizeModel(nes);
   scene.add(nes);
+  addContactShadow(scene, shadowTexture, -0.25, -0.55, 2.45, 1.35, 0.85);
 
   const tv = tvGltf.scene;
   fitModel(tv, 3.05);
   tv.rotation.set(0, 0, 0);
   placeByBottomCenter(tv, -2.35, TABLE_TOP_Y, -2.20);
-  enableShadows(tv);
+  optimizeModel(tv);
   scene.add(tv);
+  addContactShadow(scene, shadowTexture, -2.35, -2.00, 2.9, 1.35, 0.95);
   addCrtScreenOverlay(scene, tv, screenMaterial);
 
   const cartridge = cartridgeGltf.scene;
   fitModel(cartridge, 0.98);
   cartridge.rotation.set(-0.04, 0, 0);
   placeByBottomCenter(cartridge, -4.60, TABLE_TOP_Y, -0.60);
-  enableShadows(cartridge);
+  optimizeModel(cartridge);
   scene.add(cartridge);
+  addContactShadow(scene, shadowTexture, -4.60, -0.56, 1.0, 0.58, 0.7);
 
   return { cartridge };
 }
 
+function initialPixelRatio() {
+  const deviceMemory = navigator.deviceMemory ?? 8;
+  const cores = navigator.hardwareConcurrency ?? 8;
+  const budget = deviceMemory <= 4 || cores <= 4 ? 1.2 : MAX_PIXEL_RATIO;
+  return Math.min(devicePixelRatio || 1, budget);
+}
+
 export async function createScene(stage, nesCanvas, onCartridgeClick) {
-  const renderer = new THREE.WebGPURenderer({ antialias: true });
+  const renderer = new THREE.WebGPURenderer({
+    antialias: true,
+    powerPreference: "high-performance",
+  });
   await renderer.init();
 
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  let pixelRatio = initialPixelRatio();
+  renderer.setPixelRatio(pixelRatio);
   renderer.setSize(stage.clientWidth, stage.clientHeight);
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.enabled = false;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.28;
+  renderer.toneMappingExposure = 1.18;
   stage.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
@@ -217,15 +293,13 @@ export async function createScene(stage, nesCanvas, onCartridgeClick) {
   controls.minAzimuthAngle = -0.18;
   controls.maxAzimuthAngle = 0.18;
 
-  scene.add(new THREE.HemisphereLight(0xffe1bd, 0x3a2b28, 1.25));
+  scene.add(new THREE.HemisphereLight(0xffdfbd, 0x2e2020, 1.55));
 
-  const warmLight = new THREE.PointLight(0xffc07a, 72, 18, 2);
-  warmLight.position.set(0.0, 3.4, 5.8);
-  warmLight.castShadow = true;
-  warmLight.shadow.mapSize.set(1024, 1024);
-  scene.add(warmLight);
+  const keyLight = new THREE.PointLight(0xffc07a, 58, 18, 2);
+  keyLight.position.set(0.0, 3.4, 5.8);
+  scene.add(keyLight);
 
-  const fillLight = new THREE.PointLight(0xffb36b, 18, 10, 2);
+  const fillLight = new THREE.PointLight(0xffb36b, 12, 10, 2);
   fillLight.position.set(-2.8, 2.8, 4.8);
   scene.add(fillLight);
 
@@ -252,6 +326,10 @@ export async function createScene(stage, nesCanvas, onCartridgeClick) {
 
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
+  let needsRender = true;
+  let sampleFrames = 0;
+  let sampleTime = 0;
+  let lastRenderTime = performance.now();
 
   function cartridgeHit(event) {
     if (!cartridge) return false;
@@ -280,13 +358,50 @@ export async function createScene(stage, nesCanvas, onCartridgeClick) {
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
     renderer.setSize(width, height);
+    needsRender = true;
   });
 
+  function adaptPixelRatio(now) {
+    const elapsed = now - lastRenderTime;
+    lastRenderTime = now;
+    if (elapsed <= 0 || elapsed > 100) return;
+
+    sampleTime += elapsed;
+    sampleFrames += 1;
+    if (sampleFrames < 120) return;
+
+    const averageMs = sampleTime / sampleFrames;
+    const cap = Math.min(devicePixelRatio || 1, MAX_PIXEL_RATIO);
+    let next = pixelRatio;
+
+    if (averageMs > 19 && pixelRatio > MIN_PIXEL_RATIO) {
+      next = Math.max(MIN_PIXEL_RATIO, pixelRatio - 0.15);
+    } else if (averageMs < 15 && pixelRatio < cap) {
+      next = Math.min(cap, pixelRatio + 0.1);
+    }
+
+    if (Math.abs(next - pixelRatio) >= 0.05) {
+      pixelRatio = next;
+      renderer.setPixelRatio(pixelRatio);
+      renderer.setSize(stage.clientWidth, stage.clientHeight, false);
+      needsRender = true;
+    }
+
+    sampleFrames = 0;
+    sampleTime = 0;
+  }
+
   return {
-    render() {
-      nesTexture.needsUpdate = true;
-      controls.update();
+    render(frameUpdated = false) {
+      const now = performance.now();
+      adaptPixelRatio(now);
+      const controlsChanged = controls.update();
+
+      if (!frameUpdated && !controlsChanged && !needsRender) return;
+      if (frameUpdated) nesTexture.needsUpdate = true;
+
       renderer.render(scene, camera);
+      needsRender = false;
     },
     renderer,
     assetsLoaded,

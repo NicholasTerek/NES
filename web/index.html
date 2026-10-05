@@ -4,6 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>NES</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+  <link rel="preload" href="./assets/nes_console_and_controller.glb" as="fetch" crossorigin />
+  <link rel="preload" href="./assets/sony_pvm-14l2_crt_tv.glb" as="fetch" crossorigin />
+  <link rel="preload" href="./assets/nes_cartridge__super_mario_bros.glb" as="fetch" crossorigin />
   <link rel="stylesheet" href="./style.css" />
   <script type="importmap">
     {
@@ -17,6 +21,11 @@
   </script>
 </head>
 <body>
+  <div id="loading-screen" class="loading-screen" role="status" aria-live="polite">
+    <div class="loading-spinner" aria-hidden="true"></div>
+    <div class="loading-label">Loading emulator</div>
+  </div>
+
   <div id="stage"></div>
   <div class="top-fade"></div>
 

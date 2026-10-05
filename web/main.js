@@ -2,6 +2,7 @@ import createNesModule from "./nes.js";
 import { createScene } from "./scene.js";
 
 const WIDTH=256,HEIGHT=240;
+const NES_FRAME_MS=1000/60.0988;
 const palette=[
 [84,84,84],[0,30,116],[8,16,144],[48,0,136],[68,0,100],[92,0,48],[84,4,0],[60,24,0],
 [32,42,0],[8,58,0],[0,64,0],[0,60,0],[0,50,60],[0,0,0],[0,0,0],[0,0,0],
@@ -80,7 +81,7 @@ function queueAudioFrame(){
 }
 
 function runNesFrame(){
-  if(!loaded)return;
+  if(!loaded)return false;
   call("nes_run_frame",null);
   queueAudioFrame();
   const ptr=call("nes_framebuffer","number");
@@ -92,6 +93,7 @@ function runNesFrame(){
     image.data[o]=r;image.data[o+1]=g;image.data[o+2]=b;image.data[o+3]=255;
   }
   ctx.putImageData(image,0,0);
+  return true;
 }
 
 addEventListener("keydown",e=>{if(keys.has(e.code)){e.preventDefault();setKey(e.code,true);}});
@@ -112,6 +114,7 @@ romInput.addEventListener("change",async()=>{
     }
     resetButton.disabled=!loaded;
     status.textContent=loaded?`Playing ${file.name}`:`Could not load ${file.name}`;
+    if(loaded)emulationAccumulator=0;
   }catch(error){
     loaded=false;
     resetButton.disabled=true;
@@ -124,6 +127,7 @@ resetButton.addEventListener("click",async()=>{
   try{await ensureAudio();}catch(error){console.warn("Audio unavailable:",error);}
   call("nes_reset",null);
   if(audioContext)audioCursor=audioContext.currentTime;
+  emulationAccumulator=0;
 });
 
 try{
@@ -132,9 +136,31 @@ try{
   });
   loadRomButton.disabled=false;
   status.textContent=view.assetsLoaded?"Ready · click the cartridge or Load ROM":"Ready · room loaded; asset load failed";
+  requestAnimationFrame(()=>document.body.classList.add("ready"));
 }catch(error){
   status.textContent=`Emulator failed to initialize: ${error?.message ?? error}`;
+  document.querySelector(".loading-label").textContent="Could not start emulator";
   console.error("Emulator initialization failed:",error);
   throw error;
 }
-view.renderer.setAnimationLoop(()=>{runNesFrame();view.render();});
+let lastTick=performance.now();
+let emulationAccumulator=0;
+
+view.renderer.setAnimationLoop((now)=>{
+  const elapsed=Math.min(now-lastTick,100);
+  lastTick=now;
+  emulationAccumulator+=elapsed;
+
+  let frameUpdated=false;
+  let catchUpFrames=0;
+  while(loaded&&emulationAccumulator>=NES_FRAME_MS&&catchUpFrames<3){
+    frameUpdated=runNesFrame()||frameUpdated;
+    emulationAccumulator-=NES_FRAME_MS;
+    catchUpFrames+=1;
+  }
+  if(catchUpFrames===3&&emulationAccumulator>=NES_FRAME_MS){
+    emulationAccumulator=0;
+  }
+
+  view.render(frameUpdated);
+});
