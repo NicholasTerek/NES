@@ -6,8 +6,12 @@
 #include <cstdint>
 #include <memory>
 #include <span>
+#include <vector>
 
-namespace { std::unique_ptr<nes::Emulator> emulator; }
+namespace {
+std::unique_ptr<nes::Emulator> emulator;
+std::vector<float> audio_buffer;
+}
 
 extern "C" {
 EMSCRIPTEN_KEEPALIVE int nes_load_rom(const std::uint8_t* data, std::size_t size) {
@@ -30,5 +34,16 @@ EMSCRIPTEN_KEEPALIVE const std::uint8_t* nes_framebuffer() {
 }
 EMSCRIPTEN_KEEPALIVE std::size_t nes_framebuffer_size() {
     return nes::Ppu::screen_width * nes::Ppu::screen_height;
+}
+EMSCRIPTEN_KEEPALIVE const float* nes_audio_samples() {
+    if (!emulator) {
+        audio_buffer.clear();
+        return nullptr;
+    }
+    audio_buffer = emulator->take_audio_samples();
+    return audio_buffer.empty() ? nullptr : audio_buffer.data();
+}
+EMSCRIPTEN_KEEPALIVE std::size_t nes_audio_samples_size() {
+    return audio_buffer.size();
 }
 }

@@ -27,8 +27,9 @@ const resetButton=document.querySelector("#reset");
 const status=document.querySelector("#status");
 const infoToggle=document.querySelector("#info-toggle");
 const infoPanel=document.querySelector("#info-panel");
-function openRomPicker(){
+async function openRomPicker(){
   if(!module)return;
+  try{await ensureAudio();}catch(error){console.warn("Audio unavailable:",error);}
   romInput.value="";
   romInput.click();
 }
@@ -41,7 +42,16 @@ infoToggle.addEventListener("click",()=>{
 });
 
 let module,loaded=false,controller=0;
+let audioContext=null,audioCursor=0;
 const call=(name,returnType,argTypes=[],args=[])=>module.ccall(name,returnType,argTypes,args);
+
+async function ensureAudio(){
+  if(!audioContext){
+    audioContext=new AudioContext();
+    audioCursor=audioContext.currentTime;
+  }
+  if(audioContext.state==="suspended")await audioContext.resume();
+}
 
 function setKey(code,pressed){
   const bit=keys.get(code); if(bit===undefined||!module)return;
@@ -49,9 +59,30 @@ function setKey(code,pressed){
   call("nes_set_controller",null,["number"],[controller]);
 }
 
+function queueAudioFrame(){
+  if(!audioContext||audioContext.state!=="running")return;
+  const ptr=call("nes_audio_samples","number");
+  const count=call("nes_audio_samples_size","number");
+  if(!ptr||!count)return;
+
+  const samples=module.HEAPF32.slice(ptr>>2,(ptr>>2)+count);
+  const buffer=audioContext.createBuffer(1,count,44100);
+  buffer.copyToChannel(samples,0);
+
+  const source=audioContext.createBufferSource();
+  source.buffer=buffer;
+  source.connect(audioContext.destination);
+
+  const now=audioContext.currentTime;
+  if(audioCursor<now+0.03)audioCursor=now+0.03;
+  source.start(audioCursor);
+  audioCursor+=buffer.duration;
+}
+
 function runNesFrame(){
   if(!loaded)return;
   call("nes_run_frame",null);
+  queueAudioFrame();
   const ptr=call("nes_framebuffer","number");
   const size=call("nes_framebuffer_size","number");
   if(!ptr||size!==WIDTH*HEIGHT)return;
@@ -88,7 +119,12 @@ romInput.addEventListener("change",async()=>{
     console.error("ROM load failed:",error);
   }
 });
-resetButton.addEventListener("click",()=>{if(loaded)call("nes_reset",null);});
+resetButton.addEventListener("click",async()=>{
+  if(!loaded)return;
+  try{await ensureAudio();}catch(error){console.warn("Audio unavailable:",error);}
+  call("nes_reset",null);
+  if(audioContext)audioCursor=audioContext.currentTime;
+});
 
 try{
   module=await createNesModule({
