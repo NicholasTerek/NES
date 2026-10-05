@@ -72,24 +72,24 @@ function buildRoom() {
     [-5.90, 5.82, 0]
   );
 
-  // Circular rug/platform and table, pushed back toward the rear wall.
+  // Table assembly tucked into the back-left corner so its circular edge disappears into the walls.
   addMesh(
     room,
     new THREE.CylinderGeometry(4.35, 4.35, 0.04, 80),
     standardMaterial(0x101f1b, 0.96),
-    [0, 0.025, -0.80]
+    [-1.65, 0.025, -0.30]
   );
   addMesh(
     room,
     new THREE.CylinderGeometry(3.65, 3.65, 0.24, 80),
     standardMaterial(0x17352e, 0.78),
-    [0, 1.18, -0.85]
+    [-2.35, 1.18, -1.00]
   );
   addMesh(
     room,
     new THREE.CylinderGeometry(0.70, 1.18, 1.05, 40),
     standardMaterial(0x2d2722, 0.90),
-    [0, 0.62, -0.85]
+    [-2.35, 0.62, -1.00]
   );
 
   return room;
@@ -159,14 +159,14 @@ async function loadAssets(scene, screenMaterial) {
   const nes = nesGltf.scene;
   fitModel(nes, 2.15);
   nes.rotation.set(0, 0, 0);
-  placeByBottomCenter(nes, 2.10, TABLE_TOP_Y, -0.45);
+  placeByBottomCenter(nes, -0.25, TABLE_TOP_Y, -0.60);
   enableShadows(nes);
   scene.add(nes);
 
   const tv = tvGltf.scene;
   fitModel(tv, 3.05);
   tv.rotation.set(0, 0, 0);
-  placeByBottomCenter(tv, 0.00, TABLE_TOP_Y, -2.05);
+  placeByBottomCenter(tv, -2.35, TABLE_TOP_Y, -2.20);
   enableShadows(tv);
   scene.add(tv);
   addCrtScreenOverlay(scene, tv, screenMaterial);
@@ -174,7 +174,7 @@ async function loadAssets(scene, screenMaterial) {
   const cartridge = cartridgeGltf.scene;
   fitModel(cartridge, 0.98);
   cartridge.rotation.set(-0.04, 0, 0);
-  placeByBottomCenter(cartridge, -2.25, TABLE_TOP_Y, -0.45);
+  placeByBottomCenter(cartridge, -4.60, TABLE_TOP_Y, -0.60);
   enableShadows(cartridge);
   scene.add(cartridge);
 
@@ -204,12 +204,12 @@ export async function createScene(stage, nesCanvas, onCartridgeClick) {
     0.05,
     100
   );
-  camera.position.set(0.00, 2.35, 6.00);
+  camera.position.set(-2.35, 2.35, 4.55);
 
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.enablePan = false;
-  controls.target.set(0.00, 1.95, -1.05);
+  controls.target.set(-2.35, 1.95, -1.05);
   controls.minDistance = 5.6;
   controls.maxDistance = 7.4;
   controls.minPolarAngle = 1.38;
