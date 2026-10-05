@@ -210,18 +210,38 @@ function fitModel(root, targetSize) {
   root.position.sub(center);
 }
 
-function findScreenMesh(root) {
-  const exact = [];
-  const loose = [];
+function placeByBottomCenter(root, x, y, z) {
+  const box = new THREE.Box3().setFromObject(root);
+  const center = box.getCenter(new THREE.Vector3());
+  root.position.x += x - center.x;
+  root.position.y += y - box.min.y;
+  root.position.z += z - center.z;
+}
 
-  root.traverse((object) => {
-    if (!object.isMesh) return;
-    const name = object.name.toLowerCase();
-    if (/(screen|display|tube|glass|crt)/.test(name)) exact.push(object);
-    else if (/(front|panel|monitor|pvm|tv)/.test(name)) loose.push(object);
-  });
+function addCrtScreenOverlay(scene, tv, screenMaterial) {
+  const box = new THREE.Box3().setFromObject(tv);
+  const size = box.getSize(new THREE.Vector3());
+  const center = box.getCenter(new THREE.Vector3());
 
-  return exact[0] ?? loose[0] ?? null;
+  const width = size.x * 0.62;
+  const height = width * 0.75;
+
+  const screen = new THREE.Mesh(
+    new THREE.PlaneGeometry(width, height),
+    screenMaterial
+  );
+
+  screen.position.set(
+    center.x - size.x * 0.055,
+    center.y + size.y * 0.06,
+    box.max.z + 0.018
+  );
+  screen.rotation.y = tv.rotation.y;
+  screen.renderOrder = 10;
+  screen.castShadow = false;
+  screen.receiveShadow = false;
+  scene.add(screen);
+  return screen;
 }
 
 async function loadRealAssets(scene, screenMaterial) {
@@ -235,8 +255,8 @@ async function loadRealAssets(scene, screenMaterial) {
 
   const nes = nesGltf.scene;
   fitModel(nes, 2.55);
-  nes.position.set(-1.05, 1.56, 0.62);
   nes.rotation.y = 0.10;
+  placeByBottomCenter(nes, -1.05, 1.31, 0.62);
   nes.traverse((object) => {
     if (object.isMesh) {
       object.castShadow = true;
@@ -247,8 +267,8 @@ async function loadRealAssets(scene, screenMaterial) {
 
   const tv = tvGltf.scene;
   fitModel(tv, 3.65);
-  tv.position.set(0.70, 2.92, -1.12);
   tv.rotation.y = -0.035;
+  placeByBottomCenter(tv, 0.70, 1.31, -1.12);
   tv.traverse((object) => {
     if (object.isMesh) {
       object.castShadow = true;
@@ -256,20 +276,13 @@ async function loadRealAssets(scene, screenMaterial) {
     }
   });
 
-  const screen = findScreenMesh(tv);
-  if (screen) {
-    screen.material = screenMaterial;
-    screen.material.needsUpdate = true;
-    console.info("Using TV screen mesh:", screen.name || screen.uuid);
-  } else {
-    console.warn("Could not identify a TV screen mesh; keeping the model material.");
-  }
   scene.add(tv);
+  const screen = addCrtScreenOverlay(scene, tv, screenMaterial);
 
   const cartridge = cartridgeGltf.scene;
   fitModel(cartridge, 1.15);
-  cartridge.position.set(-2.55, 1.73, 0.95);
   cartridge.rotation.set(-0.16, 0.34, 0.04);
+  placeByBottomCenter(cartridge, -2.55, 1.31, 0.95);
   cartridge.userData.clickableCartridge = true;
   cartridge.traverse((object) => {
     if (object.isMesh) {
@@ -280,7 +293,7 @@ async function loadRealAssets(scene, screenMaterial) {
   });
   scene.add(cartridge);
 
-  return { nes, tv, cartridge, screenFound: Boolean(screen) };
+  return { nes, tv, cartridge, screenFound: true };
 }
 
 export async function createScene(stage, nesCanvas, onCartridgeClick) {
