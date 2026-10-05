@@ -66,5 +66,5 @@ romInput.addEventListener("change",async()=>{
 resetButton.addEventListener("click",()=>{if(loaded)call("nes_reset",null);});
 
 module=await createNesModule();
-status.textContent=view.loadedExternalScene?"Ready · 3D room loaded":"Ready · generated room";
+status.textContent="Ready · WebGPU room";
 view.renderer.setAnimationLoop(()=>{runNesFrame();view.render();});
