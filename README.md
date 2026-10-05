@@ -18,6 +18,9 @@
 
 An NES emulator built from scratch in C++20 that runs real games with graphics, sound, and keyboard controls. Under the hood, it emulates the central processor (CPU), Picture Processing Unit (PPU), Audio Processing Unit (APU), memory bus, and cartridge mappers.
 
+## Release
+[Download the current Linux test release](https://github.com/NicholasTerek/NES/releases)
+
 ## Architecture
 <p align="center">
   <img src="media/arch.png" alt="Architecture" width="32%">
