@@ -225,7 +225,7 @@ export async function createScene(stage, nesCanvas, onCartridgeClick) {
   warmLight.shadow.mapSize.set(1024, 1024);
   scene.add(warmLight);
 
-  const fillLight = new THREE.PointLight(0xa9baf0, 18, 10, 2);
+  const fillLight = new THREE.PointLight(0xffb36b, 18, 10, 2);
   fillLight.position.set(-2.8, 2.8, 4.8);
   scene.add(fillLight);
 
