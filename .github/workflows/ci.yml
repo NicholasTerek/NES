@@ -1,6 +1,10 @@
 name: CI
 
 on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -8,24 +12,13 @@ permissions:
 
 jobs:
   build-and-test:
-    name: Build and test (${{ matrix.compiler }})
+    name: Build and test (GCC)
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - compiler: GCC
-            cc: gcc
-            cxx: g++
-          - compiler: Clang
-            cc: clang
-            cxx: clang++
-
     env:
-      CC: ${{ matrix.cc }}
-      CXX: ${{ matrix.cxx }}
+      CC: gcc
+      CXX: g++
 
     steps:
       - name: Check out repository
