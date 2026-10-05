@@ -145,8 +145,9 @@ function createContactShadowTexture() {
   canvas.height = 128;
   const ctx = canvas.getContext("2d");
   const gradient = ctx.createRadialGradient(64, 64, 8, 64, 64, 62);
-  gradient.addColorStop(0, "rgba(0,0,0,.42)");
-  gradient.addColorStop(0.45, "rgba(0,0,0,.22)");
+  gradient.addColorStop(0, "rgba(0,0,0,.16)");
+  gradient.addColorStop(0.32, "rgba(0,0,0,.10)");
+  gradient.addColorStop(0.72, "rgba(0,0,0,.035)");
   gradient.addColorStop(1, "rgba(0,0,0,0)");
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, 128, 128);
@@ -316,7 +317,7 @@ async function loadAssets(scene, screenMaterial) {
   placeByBottomCenter(nes, -0.25, TABLE_TOP_Y, -0.60);
   optimizeModel(nes);
   scene.add(nes);
-  addContactShadow(scene, shadowTexture, -0.25, -0.55, 2.45, 1.35, 0.85);
+  addContactShadow(scene, shadowTexture, -0.25, -0.55, 2.20, 1.10, 0.55);
 
   const tv = tvGltf.scene;
   fitModel(tv, 3.05);
@@ -324,7 +325,7 @@ async function loadAssets(scene, screenMaterial) {
   placeByBottomCenter(tv, -2.35, TABLE_TOP_Y, -2.20);
   optimizeModel(tv);
   scene.add(tv);
-  addContactShadow(scene, shadowTexture, -2.35, -2.00, 2.9, 1.35, 0.95);
+  addContactShadow(scene, shadowTexture, -2.35, -2.00, 2.55, 1.15, 0.62);
   addCrtScreenOverlay(scene, tv, screenMaterial);
 
   const cartridge = cartridgeGltf.scene;
@@ -333,7 +334,7 @@ async function loadAssets(scene, screenMaterial) {
   placeByBottomCenter(cartridge, -4.60, TABLE_TOP_Y, -0.60);
   optimizeModel(cartridge);
   scene.add(cartridge);
-  addContactShadow(scene, shadowTexture, -4.60, -0.56, 1.0, 0.58, 0.7);
+  addContactShadow(scene, shadowTexture, -4.60, -0.56, 0.82, 0.46, 0.42);
 
   return { cartridge };
 }
