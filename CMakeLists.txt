@@ -80,7 +80,9 @@ if(NES_BUILD_WEB)
     add_custom_command(TARGET nes_web POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_SOURCE_DIR}/web/index.html" "${CMAKE_BINARY_DIR}/web/index.html"
         COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_SOURCE_DIR}/web/main.js" "${CMAKE_BINARY_DIR}/web/main.js"
+        COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_SOURCE_DIR}/web/scene.js" "${CMAKE_BINARY_DIR}/web/scene.js"
         COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_SOURCE_DIR}/web/style.css" "${CMAKE_BINARY_DIR}/web/style.css"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/web/assets" "${CMAKE_BINARY_DIR}/web/assets"
     )
 endif()
 
