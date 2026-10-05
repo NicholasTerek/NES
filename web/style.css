@@ -4,6 +4,7 @@
 .top-fade{position:fixed;inset:0 0 auto 0;height:190px;z-index:10;pointer-events:none;background:linear-gradient(to bottom,rgba(0,0,0,.86) 0%,rgba(0,0,0,.60) 35%,rgba(0,0,0,.24) 68%,rgba(0,0,0,0) 100%)}
 .hud{position:fixed;top:1rem;left:1rem;right:1rem;z-index:20;display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none}
 .title{font-weight:700;letter-spacing:.12em;text-shadow:0 2px 12px #000;pointer-events:none}
+.portfolio-link{pointer-events:auto;color:#f4f1ea;text-decoration:none;font-weight:700;letter-spacing:.08em;text-shadow:0 2px 12px #000}.portfolio-link:hover{text-decoration:underline}
 .hud-menu{position:relative;display:flex;flex-direction:column;align-items:flex-end;gap:.7rem;pointer-events:auto}
 .info-toggle{width:50px;height:50px;border-radius:50%;border:1px solid #ffffff55;background:#111c;color:#f4f1ea;font:700 1.25rem/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;cursor:pointer;backdrop-filter:blur(10px);box-shadow:0 8px 24px #0006;padding:0}
 .info-toggle:hover{background:#24211ecc}.info-toggle:focus-visible{outline:2px solid #f4f1ea;outline-offset:3px}
